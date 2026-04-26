@@ -14,12 +14,21 @@ function showStatus(msg: string) {
   setTimeout(() => (el.textContent = ''), 3000);
 }
 
+function setActiveTab(tabName: string) {
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.classList.toggle('active', (btn as HTMLElement).dataset.tab === tabName);
+  });
+  document.querySelectorAll('.tab-panel').forEach((panel) => {
+    panel.classList.toggle('hidden', panel.id !== `${tabName}Panel`);
+  });
+}
+
 function renderRules(rules: GroupRule[]) {
   const list = $('rulesList');
   if (!list) return;
 
   if (rules.length === 0) {
-    list.innerHTML = '<div class="empty">No rules yet. Add one above.</div>';
+    list.innerHTML = '<div class="empty">No rules yet. Open the Add tab to create one.</div>';
     return;
   }
 
@@ -29,17 +38,15 @@ function renderRules(rules: GroupRule[]) {
     <div class="rule-item" data-id="${r.id}">
       <div class="rule-info">
         <div class="rule-pattern">${escapeHtml(r.pattern)}</div>
-        <div class="rule-group">${escapeHtml(r.groupName)} ${r.description ? '— ' + escapeHtml(r.description) : ''}</div>
+        <div class="rule-group">${escapeHtml(r.groupName)} ${r.description ? '<br><small>' + escapeHtml(r.description) + '</small>' : ''}</div>
       </div>
-      <div class="actions">
-        <button class="delete" data-id="${r.id}">Remove</button>
-      </div>
+      <button class="outline small" data-id="${r.id}">Remove</button>
     </div>
   `
     )
     .join('');
 
-  list.querySelectorAll('button.delete').forEach((btn) => {
+  list.querySelectorAll('button[data-id]').forEach((btn) => {
     btn.addEventListener('click', async (e) => {
       const id = (e.currentTarget as HTMLButtonElement).dataset.id;
       if (!id) return;
@@ -64,6 +71,15 @@ async function refresh() {
 async function init() {
   await refresh();
 
+  // Tab switching
+  document.querySelectorAll('.tab-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const tab = (btn as HTMLElement).dataset.tab || 'rules';
+      setActiveTab(tab);
+    });
+  });
+
+  // Add Rule
   $('addRule')?.addEventListener('click', async () => {
     const pattern = ($('pattern') as HTMLInputElement)?.value.trim();
     const groupName = ($('groupName') as HTMLInputElement)?.value.trim();
@@ -83,13 +99,15 @@ async function init() {
 
     await refresh();
     showStatus('Rule added');
+    setActiveTab('rules');
   });
 
+  // Organize All Tabs (header button)
   $('organizeTabs')?.addEventListener('click', async () => {
     const btn = $('organizeTabs') as HTMLButtonElement;
     if (!btn) return;
-    const originalText = btn.textContent || 'Organize Open Tabs';
-    btn.textContent = 'Organizing...';
+    const originalText = btn.textContent || '📋 Organize All Tabs';
+    btn.textContent = '📋 Organizing...';
     btn.disabled = true;
 
     try {

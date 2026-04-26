@@ -1,174 +1,100 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>Tabby Sitter</title>
-  <style>
-    :root {
-      --bg: #f9fafb;
-      --surface: #ffffff;
-      --text: #111827;
-      --muted: #6b7280;
-      --border: #e5e7eb;
-      --primary: #2563eb;
-      --primary-hover: #1d4ed8;
-      --radius: 8px;
-      --space: 12px;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tabby Sitter</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header>
+      <div class="brand">
+        <img src="../../icons/icon32.png" alt="Tabby Sitter" class="brand-icon" />
+        <h1>Tabby Sitter</h1>
+      </div>
+      <nav>
+        <button id="organizeTabs" class="outline" title="Organize all open tabs">
+          📋 Organize All Tabs
+        </button>
+      </nav>
+      <div id="status"></div>
+    </header>
 
-    * { box-sizing: border-box; }
-    body {
-      width: 360px;
-      margin: 0;
-      padding: var(--space);
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
-    }
+    <nav class="tabs" aria-label="Sections">
+      <button class="tab-btn active" data-tab="rules">Rules</button>
+      <button class="tab-btn" data-tab="add">Add</button>
+      <button class="tab-btn" data-tab="config">Config</button>
+    </nav>
 
-    h1 {
-      font-size: 16px;
-      margin: 0 0 var(--space);
-    }
+    <section class="tab-panel" id="rulesPanel">
+      <article class="card">
+        <div id="rulesList"></div>
+      </article>
+    </section>
 
-    .section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: var(--space);
-      margin-bottom: var(--space);
-    }
+    <section class="tab-panel hidden" id="addPanel">
+      <article class="card">
+        <h2>Add Rule</h2>
+        <label for="pattern">Pattern</label>
+        <input type="text" id="pattern" placeholder="e.g. github.com" />
 
-    .form-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 8px;
-    }
-
-    input, select, button {
-      padding: 8px;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      font-size: 13px;
-      outline: none;
-      width: 100%;
-    }
-
-    input:focus, select:focus {
-      border-color: var(--primary);
-    }
-
-    button {
-      background: var(--primary);
-      color: #fff;
-      border: none;
-      cursor: pointer;
-      font-weight: 500;
-      width: auto;
-      white-space: nowrap;
-    }
-    button:hover {
-      background: var(--primary-hover);
-    }
-    button.delete {
-      background: #ef4444;
-    }
-    button.delete:hover {
-      background: #b91c1c;
-    }
-
-    .organize-btn {
-      width: 100%;
-      background: #059669;
-    }
-    .organize-btn:hover {
-      background: #047857;
-    }
-
-    .config-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }
-    .config-actions button {
-      flex: 1;
-      font-size: 12px;
-      padding: 6px;
-    }
-    .config-actions button.secondary {
-      background: var(--muted);
-    }
-    .config-actions button.secondary:hover {
-      background: #4b5563;
-    }
-
-    .rule-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px;
-      border-bottom: 1px solid var(--border);
-    }
-    .rule-item:last-child { border-bottom: none; }
-    .rule-info { flex: 1; }
-    .rule-pattern { font-weight: 500; }
-    .rule-group { font-size: 12px; color: var(--muted); margin-top: 2px; }
-    .actions { display: flex; gap: 6px; }
-
-    .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 12px 0; }
-
-    #status { font-size: 12px; color: var(--primary); margin-top: 6px; min-height: 18px; }
-  </style>
-</head>
-<body>
-  <h1>Tabby Sitter</h1>
-
-  <div class="section">
-    <div class="form-row">
-      <input type="text" id="pattern" placeholder="e.g. github.com" />
-    </div>
-    <div class="form-row">
+        <label for="groupName">Group Name</label>
         <input type="text" id="groupName" placeholder="Group name (e.g. GitHub)" />
-    </div>
-    <div class="form-row">
-      <select id="color">
-        <option value="blue">Blue</option>
-        <option value="red">Red</option>
-        <option value="yellow">Yellow</option>
-        <option value="green">Green</option>
-        <option value="cyan">Cyan</option>
-        <option value="purple">Purple</option>
-        <option value="orange">Orange</option>
-        <option value="pink">Pink</option>
-        <option value="grey">Grey</option>
-      </select>
-      <input type="text" id="description" placeholder="Description (optional)" />
-    </div>
-    <button id="addRule">Add Rule</button>
-    <div id="status"></div>
-  </div>
 
-  <div class="section">
-    <h3 style="font-size: 13px; margin: 0 0 8px;">Config</h3>
-    <p style="font-size: 12px; color: var(--muted); margin: 0 0 8px;">
-      Save rules to a file so you can sync them across computers.
-    </p>
-    <div class="config-actions">
-      <button id="exportConfig">Export Rules</button>
-      <button id="importConfig" class="secondary">Import Rules</button>
-      <button id="createConfig" class="secondary">Create Starter</button>
-    </div>
-    <input type="file" id="configFileInput" accept=".json" style="display: none;" />
-  </div>
+        <label for="color">Color</label>
+        <select id="color">
+          <option value="blue">Blue</option>
+          <option value="red">Red</option>
+          <option value="yellow">Yellow</option>
+          <option value="green">Green</option>
+          <option value="cyan">Cyan</option>
+          <option value="purple">Purple</option>
+          <option value="orange">Orange</option>
+          <option value="pink">Pink</option>
+          <option value="grey">Grey</option>
+        </select>
 
-  <div class="section">
-    <button id="organizeTabs" class="organize-btn">Organize Open Tabs</button>
-  </div>
+        <label for="description">Description (optional)</label>
+        <input type="text" id="description" placeholder="E.g. GitHub repos and issues" />
 
-  <div class="section">
-    <div id="rulesList"></div>
-  </div>
+        <button id="addRule">Add Rule</button>
+      </article>
+    </section>
 
-  <script type="module" src="./popup.ts"></script>
-</body>
+    <section class="tab-panel hidden" id="configPanel">
+      <article class="card">
+        <h2>Export Rules</h2>
+        <p class="hint">
+          Generate a config file so you can sync rules across computers or back them up.
+        </p>
+        <button id="exportConfig" class="secondary">Export Rules</button>
+      </article>
+
+      <article class="card">
+        <h2>Import Rules</h2>
+        <p class="hint">
+          Load a previously exported config file. This replaces your current rules.
+        </p>
+        <button id="importConfig" class="secondary">Import Rules</button>
+        <input type="file" id="configFileInput" accept=".json" style="display: none" />
+      </article>
+
+      <article class="card">
+        <h2>Starter Config</h2>
+        <p class="hint">
+          Download an example config file with sample rules.
+        </p>
+        <button id="createConfig" class="secondary">Create Starter</button>
+      </article>
+    </section>
+
+    <footer>
+      <span>v0.1.0</span>
+      <span class="sep">·</span>
+      <span>By Dups: <a href="https://dups.ca" target="_blank" rel="noopener">dups.ca</a></span>
+      <span class="sep">·</span>
+      <a href="https://github.com/Duleepa/tabby-sitter" target="_blank" rel="noopener">Contribute</a>
+    </footer>
+
+    <script type="module" src="./popup.ts"></script>
+  </body>
 </html>
