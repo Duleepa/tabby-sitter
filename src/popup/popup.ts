@@ -79,6 +79,28 @@ async function init() {
     await refresh();
     showStatus('Rule added');
   });
+
+  $('organizeTabs')?.addEventListener('click', async () => {
+    const btn = $('organizeTabs') as HTMLButtonElement;
+    if (!btn) return;
+    const originalText = btn.textContent || 'Organize Open Tabs';
+    btn.textContent = 'Organizing...';
+    btn.disabled = true;
+
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'organizeAllTabs' });
+      if (response?.success) {
+        showStatus('Tabs organized!');
+      } else {
+        showStatus('Failed to organize tabs');
+      }
+    } catch (err) {
+      showStatus('Error: ' + String(err));
+    } finally {
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }
+  });
 }
 
 init();
