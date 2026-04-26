@@ -85,6 +85,23 @@
       background: #047857;
     }
 
+    .config-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .config-actions button {
+      flex: 1;
+      font-size: 12px;
+      padding: 6px;
+    }
+    .config-actions button.secondary {
+      background: var(--muted);
+    }
+    .config-actions button.secondary:hover {
+      background: #4b5563;
+    }
+
     .rule-item {
       display: flex;
       justify-content: space-between;
@@ -129,6 +146,19 @@
     </div>
     <button id="addRule">Add Rule</button>
     <div id="status"></div>
+  </div>
+
+  <div class="section">
+    <h3 style="font-size: 13px; margin: 0 0 8px;">Config</h3>
+    <p style="font-size: 12px; color: var(--muted); margin: 0 0 8px;">
+      Save rules to a file so you can sync them across computers.
+    </p>
+    <div class="config-actions">
+      <button id="exportConfig">Export Rules</button>
+      <button id="importConfig" class="secondary">Import Rules</button>
+      <button id="createConfig" class="secondary">Create Starter</button>
+    </div>
+    <input type="file" id="configFileInput" accept=".json" style="display: none;" />
   </div>
 
   <div class="section">

@@ -1,4 +1,9 @@
 import { addRule, getRules, removeRule, type GroupRule } from '../storage/rules';
+import {
+  exportConfigFile,
+  importConfigFile,
+  downloadStarterConfig,
+} from '../storage/config';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement | null;
 
@@ -14,7 +19,7 @@ function renderRules(rules: GroupRule[]) {
   if (!list) return;
 
   if (rules.length === 0) {
-    list.innerHTML = `<div class="empty">No rules yet. Add one above.</div>`;
+    list.innerHTML = '<div class="empty">No rules yet. Add one above.</div>';
     return;
   }
 
@@ -100,6 +105,41 @@ async function init() {
       btn.textContent = originalText;
       btn.disabled = false;
     }
+  });
+
+  // Config file actions
+  $('exportConfig')?.addEventListener('click', async () => {
+    try {
+      await exportConfigFile();
+      showStatus('Config exported!');
+    } catch (err) {
+      showStatus('Export failed: ' + String(err));
+    }
+  });
+
+  $('importConfig')?.addEventListener('click', () => {
+    ($('configFileInput') as HTMLInputElement)?.click();
+  });
+
+  $('configFileInput')?.addEventListener('change', async (e) => {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+
+    try {
+      await importConfigFile(file);
+      await refresh();
+      showStatus('Config imported!');
+    } catch (err) {
+      showStatus('Import failed: ' + String(err));
+    } finally {
+      input.value = '';
+    }
+  });
+
+  $('createConfig')?.addEventListener('click', () => {
+    downloadStarterConfig();
+    showStatus('Starter config downloaded!');
   });
 }
 

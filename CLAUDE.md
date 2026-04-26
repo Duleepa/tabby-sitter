@@ -20,6 +20,8 @@ src/
   background/         Service worker — event-driven tab processing
   popup/              Extension popup UI (HTML + TS)
   storage/            Shared rule storage helpers + types
+    rules.ts          CRUD for grouping rules via chrome.storage.local
+    config.ts         Import/export rules as JSON config files
 ```
 
 ### Key Files
@@ -28,7 +30,8 @@ src/
 |------|--------------|
 | `src/background/background.ts` | Listens to `chrome.tabs.onUpdated` and `onCreated`, matches URLs against rules, moves/creates tab groups |
 | `src/storage/rules.ts` | CRUD for grouping rules via `chrome.storage.local` |
-| `src/popup/popup.ts` | Popup UI logic: add/remove rules, render list |
+| `src/storage/config.ts` | Import/export rules as JSON config files for cross-machine sync |
+| `src/popup/popup.ts` | Popup UI logic: add/remove rules, render list, import/export config |
 | `src/popup/popup.html` | Popup markup |
 
 ## Development Rules
@@ -71,15 +74,54 @@ interface GroupRule {
 }
 ```
 
-### 5. Types & Type Safety
+### 5. Config File Sync (Cross-Machine)
+
+Rules can be exported/imported as JSON via the popup for syncing across computers:
+
+```typescript
+interface ConfigFile {
+  tabbySitter: {
+    version: string;
+    rules: GroupRule[];
+  };
+}
+```
+
+**Workflow:**
+1. Add rules in the popup → click **Export Rules**
+2. Save `tabby-sitter.conf.json` to a synced folder (e.g. Dropbox, Obsidian vault, iCloud)
+3. On another machine, click **Import Rules** and pick the synced file
+
+**Why not auto-read from disk?**
+Chrome extensions cannot access arbitrary filesystem paths for security. The user must explicitly choose the file via the browser's native file picker (`<input type="file">`).
+
+**Config file example:**
+```json
+{
+  "tabbySitter": {
+    "version": "1.0.0",
+    "rules": [
+      {
+        "id": "abc123",
+        "pattern": "github.com",
+        "groupName": "Dev",
+        "description": "GitHub repos, PRs, issues",
+        "color": "blue"
+      }
+    ]
+  }
+}
+```
+
+### 6. Types & Type Safety
 - Always import `chrome` types from `@types/chrome` (already in devDependencies).
 - Use `chrome.tabGroups.ColorEnum` not `chrome.tabGroups.Color` (the namespace exports `ColorEnum`).
 
-### 6. Icons
+### 7. Icons
 - Place source icons in `public/icons/` (sizes: 16, 48, 128).
 - Vite/CRXJS copies `public/` into `dist/` automatically.
 
-### 7. Adding New Features
+### 8. Adding New Features
 
 When adding a new feature:
 1. Keep it inside the existing `src/background`, `src/popup`, or `src/storage` hierarchy.
