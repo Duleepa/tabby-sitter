@@ -1,25 +1,20 @@
-import zlib
-import struct
+#!/usr/bin/env python3
+"""Convert tabby-sitter.png into Chrome extension icon set — resize as-is, no crop, no transparency."""
+from PIL import Image
 import os
 
-def make_png(width, height, rgb):
-    def png_chunk(chunk_type, data):
-        chunk = chunk_type + data
-        crc = zlib.crc32(chunk) & 0xffffffff
-        return struct.pack('>I', len(data)) + chunk + struct.pack('>I', crc)
-    
-    raw = b''.join(b'\x00' + bytes(rgb) * width for _ in range(height))
-    compressed = zlib.compress(raw)
-    
-    idat = png_chunk(b'IDAT', compressed)
-    ihdr = png_chunk(b'IHDR', struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0))
-    iend = png_chunk(b'IEND', b'')
-    
-    return b'\x89PNG\r\n\x1a\n' + ihdr + idat + iend
+SRC = '/Users/dups/Downloads/tabby-sitter.png'
+OUT_DIR = '/Users/dups/Source/tabby-sitter/public/icons'
+SIZES = [16, 32, 48, 128]
 
-os.makedirs('public/icons', exist_ok=True)
-for size in [16, 48, 128]:
-    with open(f'public/icons/icon{size}.png', 'wb') as f:
-        f.write(make_png(size, size, (0x1a, 0x73, 0xe8)))  # blue-ish
+def main():
+    img = Image.open(SRC).convert('RGBA')
 
-print("Icons generated in public/icons")
+    for size in SIZES:
+        icon = img.resize((size, size), Image.Resampling.LANCZOS)
+        icon_path = os.path.join(OUT_DIR, f'icon{size}.png')
+        icon.save(icon_path)
+        print(f"Saved {icon_path}")
+
+if __name__ == '__main__':
+    main()
