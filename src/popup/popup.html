@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tabby Sitter</title>
+  <style>
+    :root {
+      --bg: #f9fafb;
+      --surface: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --border: #e5e7eb;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --radius: 8px;
+      --space: 12px;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      width: 360px;
+      margin: 0;
+      padding: var(--space);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    h1 {
+      font-size: 16px;
+      margin: 0 0 var(--space);
+    }
+
+    .section {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: var(--space);
+      margin-bottom: var(--space);
+    }
+
+    .form-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    input, select, button {
+      padding: 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      font-size: 13px;
+      outline: none;
+      width: 100%;
+    }
+
+    input:focus, select:focus {
+      border-color: var(--primary);
+    }
+
+    button {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      font-weight: 500;
+      width: auto;
+      white-space: nowrap;
+    }
+    button:hover {
+      background: var(--primary-hover);
+    }
+    button.delete {
+      background: #ef4444;
+    }
+    button.delete:hover {
+      background: #b91c1c;
+    }
+
+    .rule-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+    .rule-item:last-child { border-bottom: none; }
+    .rule-info { flex: 1; }
+    .rule-pattern { font-weight: 500; }
+    .rule-group { font-size: 12px; color: var(--muted); margin-top: 2px; }
+    .actions { display: flex; gap: 6px; }
+
+    .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 12px 0; }
+
+    #status { font-size: 12px; color: var(--primary); margin-top: 6px; min-height: 18px; }
+  </style>
+</head>
+<body>
+  <h1>Tabby Sitter</h1>
+
+  <div class="section">
+    <div class="form-row">
+      <input type="text" id="pattern" placeholder="e.g. git.supermetrics.com" />
+    </div>
+    <div class="form-row">
+      <input type="text" id="groupName" placeholder="Group name (e.g. SM Git)" />
+    </div>
+    <div class="form-row">
+      <select id="color">
+        <option value="blue">Blue</option>
+        <option value="red">Red</option>
+        <option value="yellow">Yellow</option>
+        <option value="green">Green</option>
+        <option value="cyan">Cyan</option>
+        <option value="purple">Purple</option>
+        <option value="orange">Orange</option>
+        <option value="pink">Pink</option>
+        <option value="grey">Grey</option>
+      </select>
+      <input type="text" id="description" placeholder="Description (optional)" />
+    </div>
+    <button id="addRule">Add Rule</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="section">
+    <div id="rulesList"></div>
+  </div>
+
+  <script type="module" src="./popup.ts"></script>
+</body>
+</html>
