@@ -51,8 +51,11 @@ function renderRules(rules: GroupRule[]) {
       (r) => `
     <div class="rule-item" data-id="${r.id}">
       <div class="rule-info">
-        <div class="rule-pattern">${renderPatterns(r.patterns, r.matchMode)}</div>
-        <div class="rule-group">${escapeHtml(r.groupName)} ${r.description ? '<br><small>' + escapeHtml(r.description) + '</small>' : ''}</div>
+        <div class="rule-title">${escapeHtml(r.description || r.groupName)}</div>
+        <div class="rule-meta">
+          ${r.description ? escapeHtml(r.groupName) + ' · ' : ''}
+          ${renderPatterns(r.patterns, r.matchMode)}
+        </div>
       </div>
       <button class="outline small" data-id="${r.id}">Remove</button>
     </div>
