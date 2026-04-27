@@ -220,11 +220,11 @@ label {
   flex: 1;
   min-width: 0;
 }
-.rule-pattern {
+.rule-title {
   font-weight: 600;
   font-size: 0.9rem;
 }
-.rule-group {
+.rule-meta {
   font-size: 0.8rem;
   color: var(--muted);
 }
