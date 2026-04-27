@@ -1,4 +1,4 @@
-import { addRule, getRules, removeRule, type GroupRule } from '../storage/rules';
+import { addRule, getRules, removeRule, type GroupRule, type MatchMode } from '../storage/rules';
 import {
   exportConfigFile,
   importConfigFile,
@@ -23,6 +23,20 @@ function setActiveTab(tabName: string) {
   });
 }
 
+function escapeHtml(s: string): string {
+  const div = document.createElement('div');
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function renderPatterns(patterns: string[], mode: MatchMode): string {
+  const joined = escapeHtml(patterns.join(', '));
+  if (joined.length > 50) {
+    return joined.slice(0, 50) + '…';
+  }
+  return `${joined} <span class="rule-mode">(${mode})</span>`;
+}
+
 function renderRules(rules: GroupRule[]) {
   const list = $('rulesList');
   if (!list) return;
@@ -37,7 +51,7 @@ function renderRules(rules: GroupRule[]) {
       (r) => `
     <div class="rule-item" data-id="${r.id}">
       <div class="rule-info">
-        <div class="rule-pattern">${escapeHtml(r.pattern)}</div>
+        <div class="rule-pattern">${renderPatterns(r.patterns, r.matchMode)}</div>
         <div class="rule-group">${escapeHtml(r.groupName)} ${r.description ? '<br><small>' + escapeHtml(r.description) + '</small>' : ''}</div>
       </div>
       <button class="outline small" data-id="${r.id}">Remove</button>
@@ -57,15 +71,16 @@ function renderRules(rules: GroupRule[]) {
   });
 }
 
-function escapeHtml(s: string): string {
-  const div = document.createElement('div');
-  div.textContent = s;
-  return div.innerHTML;
-}
-
 async function refresh() {
   const rules = await getRules();
   renderRules(rules);
+}
+
+function parsePatterns(text: string): string[] {
+  return text
+    .split(/[\n,;]+/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
 }
 
 async function init() {
@@ -81,21 +96,36 @@ async function init() {
 
   // Add Rule
   $('addRule')?.addEventListener('click', async () => {
-    const pattern = ($('pattern') as HTMLInputElement)?.value.trim();
+    const patternsRaw = ($('patterns') as HTMLTextAreaElement)?.value.trim();
     const groupName = ($('groupName') as HTMLInputElement)?.value.trim();
     const color = ($('color') as HTMLSelectElement)?.value as chrome.tabGroups.ColorEnum;
+    const matchMode = ($('matchMode') as HTMLSelectElement)?.value as MatchMode;
     const description = ($('description') as HTMLInputElement)?.value.trim();
 
-    if (!pattern || !groupName) {
-      showStatus('Pattern and group name are required');
+    const patterns = parsePatterns(patternsRaw);
+
+    if (patterns.length === 0 || !groupName) {
+      showStatus('At least one pattern and a group name are required');
       return;
     }
 
-    await addRule({ pattern, groupName, color, description: description || undefined });
+    if (matchMode === 'regex') {
+      const invalid = patterns.find((p) => {
+        try { new RegExp(p); return false; }
+        catch { return true; }
+      });
+      if (invalid !== undefined) {
+        showStatus(`Invalid regex: "${invalid}"`);
+        return;
+      }
+    }
 
-    ($('pattern') as HTMLInputElement).value = '';
+    await addRule({ patterns, groupName, color, matchMode, description: description || undefined });
+
+    ($('patterns') as HTMLTextAreaElement).value = '';
     ($('groupName') as HTMLInputElement).value = '';
     ($('description') as HTMLInputElement).value = '';
+    ($('matchMode') as HTMLSelectElement).value = 'contains';
 
     await refresh();
     showStatus('Rule added');

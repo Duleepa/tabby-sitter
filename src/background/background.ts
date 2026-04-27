@@ -1,4 +1,4 @@
-import { getRules, matchesPattern } from '../storage/rules';
+import { getRules, matchesRule } from '../storage/rules';
 
 console.log('[Background] Tabby Sitter started.');
 
@@ -17,7 +17,7 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
 
   const rules = await getRules();
   for (const rule of rules) {
-    if (matchesPattern(tab.url, rule.pattern)) {
+      if (matchesRule(tab.url, rule)) {
       let groupId = await findOrReserveGroup(rule.groupName);
 
       if (groupId === -1) {
@@ -57,7 +57,7 @@ export async function organizeAllTabs(): Promise<void> {
     if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
 
     for (const rule of rules) {
-      if (matchesPattern(tab.url, rule.pattern)) {
+    if (matchesRule(tab.url, rule)) {
         let groupId = groupNameToId.get(rule.groupName) ?? -1;
 
         if (groupId === -1) {
