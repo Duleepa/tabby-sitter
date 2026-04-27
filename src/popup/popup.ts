@@ -135,27 +135,32 @@ async function init() {
     setActiveTab('rules');
   });
 
+  const ORGANIZE_IDLE = '📋 Organize All Tabs';
+  const ORGANIZE_DELAY_MS = 2000;
+
   // Organize All Tabs (header button)
   $('organizeTabs')?.addEventListener('click', async () => {
     const btn = $('organizeTabs') as HTMLButtonElement;
-    if (!btn) return;
-    const originalText = btn.textContent || '📋 Organize All Tabs';
-    btn.textContent = '📋 Organizing...';
+    if (!btn || btn.disabled) return;
+    btn.textContent = '📋 ...';
     btn.disabled = true;
 
     try {
       const response = await chrome.runtime.sendMessage({ action: 'organizeAllTabs' });
       if (response?.success) {
-        showStatus('Tabs organized!');
+        btn.textContent = '✅ Tabs Organized';
       } else {
-        showStatus('Failed to organize tabs');
+        btn.textContent = '❌ Failed!';
       }
     } catch (err) {
-      showStatus('Error: ' + String(err));
-    } finally {
-      btn.textContent = originalText;
-      btn.disabled = false;
+      btn.textContent = '❌ Error!';
+      console.error(err);
     }
+
+    setTimeout(() => {
+      btn.textContent = ORGANIZE_IDLE;
+      btn.disabled = false;
+    }, ORGANIZE_DELAY_MS);
   });
 
   // Config file actions
