@@ -34,8 +34,15 @@
     <section class="tab-panel hidden" id="addPanel">
       <article class="card">
         <h2>Add Rule</h2>
-        <label for="pattern">Pattern</label>
-        <input type="text" id="pattern" placeholder="e.g. github.com" />
+        <label for="patterns">Patterns</label>
+        <textarea id="patterns" rows="3" placeholder="github.com, stackoverflow.com
+or regex patterns if using Regex mode"></textarea>
+
+        <label for="matchMode">Match Mode</label>
+        <select id="matchMode">
+          <option value="contains" selected>Contains</option>
+          <option value="regex">Regex</option>
+        </select>
 
         <label for="groupName">Group Name</label>
         <input type="text" id="groupName" placeholder="Group name (e.g. GitHub)" />

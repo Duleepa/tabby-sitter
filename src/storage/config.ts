@@ -8,6 +8,7 @@ export interface ConfigFile {
 }
 
 const CONFIG_FILE_NAME = 'tabby-sitter.conf.json';
+const CONFIG_VERSION = '0.2.0';
 
 /**
  * Download current rules as a JSON config file.
@@ -17,7 +18,7 @@ export async function exportConfigFile(): Promise<void> {
   const rules = await getRules();
   const config: ConfigFile = {
     tabbySitter: {
-      version: '1.0.0',
+      version: CONFIG_VERSION,
       rules,
     },
   };
@@ -36,6 +37,7 @@ export async function exportConfigFile(): Promise<void> {
 
 /**
  * Import rules from a JSON config file dropped/picked by the user.
+ * Accepts new schema (patterns + matchMode) and old single-pattern schema.
  */
 export async function importConfigFile(file: File): Promise<GroupRule[]> {
   const text = await file.text();
@@ -45,13 +47,23 @@ export async function importConfigFile(file: File): Promise<GroupRule[]> {
     throw new Error('Invalid config file: expected { tabbySitter: { rules: [...] } }');
   }
 
-  const rules = parsed.tabbySitter.rules.map((r) => ({
-    id: r.id || crypto.randomUUID(),
-    pattern: r.pattern,
-    groupName: r.groupName,
-    description: r.description,
-    color: r.color,
+  const rules = (parsed.tabbySitter.rules as any[]).map((r) => ({
+    id: (r.id || crypto.randomUUID()) as string,
+    patterns:
+      Array.isArray(r.patterns) && r.patterns.length > 0
+        ? (r.patterns as string[])
+        : r.pattern
+          ? [r.pattern as string]
+          : [],
+    groupName: (r.groupName || '') as string,
+    description: r.description as string | undefined,
+    color: r.color as chrome.tabGroups.ColorEnum | undefined,
+    matchMode: (r.matchMode || 'contains') as 'contains' | 'regex',
   }));
+
+  if (rules.some((r) => r.patterns.length === 0)) {
+    throw new Error('Invalid rule: patterns cannot be empty');
+  }
 
   await saveRules(rules);
   return rules;
@@ -67,42 +79,47 @@ export function createStarterConfig(): ConfigFile {
 
   return {
     tabbySitter: {
-      version: '1.0.0',
+      version: CONFIG_VERSION,
       rules: [
         {
           id: generateId(),
-          pattern: 'github.com',
+          patterns: ['github.com', 'stackoverflow.com'],
           groupName: 'Dev',
-          description: 'GitHub repos, PRs, issues',
+          description: 'GitHub repos and Stack Overflow',
           color: 'blue',
+          matchMode: 'contains',
         },
         {
           id: generateId(),
-          pattern: 'stackoverflow.com',
-          groupName: 'Dev',
-          description: 'Stack Overflow questions',
-          color: 'blue',
-        },
-        {
-          id: generateId(),
-          pattern: 'docs.google.com',
+          patterns: ['docs.google.com'],
           groupName: 'Docs',
           description: 'Google Docs',
           color: 'green',
+          matchMode: 'contains',
         },
         {
           id: generateId(),
-          pattern: 'mail.google.com',
+          patterns: ['mail.google.com'],
           groupName: 'Comms',
           description: 'Gmail',
           color: 'red',
+          matchMode: 'contains',
         },
         {
           id: generateId(),
-          pattern: 'youtube.com',
+          patterns: ['youtube.com', 'www.youtube.com'],
           groupName: 'Media',
           description: 'YouTube videos',
           color: 'purple',
+          matchMode: 'contains',
+        },
+        {
+          id: generateId(),
+          patterns: ['x.com', 'twitter.com', 'instagram.com'],
+          groupName: 'Social',
+          description: 'Social media sites',
+          color: 'cyan',
+          matchMode: 'contains',
         },
       ],
     },

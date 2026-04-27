@@ -174,7 +174,7 @@ button.small {
 }
 
 /* Inputs */
-input, select {
+input, select, textarea {
   width: 100%;
   padding: 0.5rem;
   margin-bottom: 0.6rem;
@@ -186,8 +186,13 @@ input, select {
   outline: none;
   transition: border-color 0.15s;
 }
-input:focus, select:focus {
+input:focus, select:focus, textarea:focus {
   border-color: var(--primary);
+}
+textarea {
+  min-height: 4rem;
+  resize: vertical;
+  font-family: inherit;
 }
 label {
   display: block;
@@ -220,6 +225,12 @@ label {
 .rule-group {
   font-size: 0.8rem;
   color: var(--muted);
+}
+.rule-mode {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary);
+  margin-left: 0.2rem;
 }
 .hint {
   font-size: 0.8rem;
