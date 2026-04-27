@@ -4,24 +4,25 @@ console.log('[Background] Tabby Sitter started.');
 
 const tabGroupMap = new Map<number, number>(); // tabId -> groupId
 
-/** Returns an existing group ID for the name, or -1 to signal "create new with next tab" */
-async function findOrReserveGroup(
-  groupName: string
+/** Returns an existing group ID for the name in a specific window, or -1 to signal "create new with next tab" */
+async function findOrReserveGroupInWindow(
+  groupName: string,
+  windowId: number
 ): Promise<number> {
-  const groups = await chrome.tabGroups.query({});
+  const groups = await chrome.tabGroups.query({ windowId });
   return groups.find((g) => g.title === groupName)?.id ?? -1;
 }
 
 async function processTab(tab: chrome.tabs.Tab): Promise<void> {
-  if (!tab.id || !tab.url) return;
+  if (!tab.id || !tab.url || !tab.windowId) return;
 
   const rules = await getRules();
   for (const rule of rules) {
-      if (matchesRule(tab.url, rule)) {
-      let groupId = await findOrReserveGroup(rule.groupName);
+    if (matchesRule(tab.url, rule)) {
+      let groupId = await findOrReserveGroupInWindow(rule.groupName, tab.windowId);
 
       if (groupId === -1) {
-        // Group doesn't exist yet; create it from this tab
+        // Group doesn't exist yet in this window; create it from this tab
         groupId = await chrome.tabs.group({ tabIds: tab.id });
         await chrome.tabGroups.update(groupId, {
           title: rule.groupName,
@@ -33,7 +34,7 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
       }
 
       tabGroupMap.set(tab.id, groupId);
-      console.log(`[Background] Tab ${tab.id} moved to group "${rule.groupName}"`);
+      console.log(`[Background] Tab ${tab.id} moved to group "${rule.groupName}" in window ${tab.windowId}`);
       return;
     }
   }
@@ -42,11 +43,14 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
 /** Process all open tabs in the current window against current rules */
 export async function organizeAllTabs(): Promise<void> {
   const tabs = await chrome.tabs.query({ currentWindow: true });
+  if (tabs.length === 0) return;
+
+  const windowId = tabs[0].windowId;
   const rules = await getRules();
   const groupNameToId = new Map<string, number>();
 
-  // Pre-resolve existing groups
-  const groups = await chrome.tabGroups.query({});
+  // Pre-resolve existing groups in this window only
+  const groups = await chrome.tabGroups.query({ windowId });
   for (const group of groups) {
     if (group.title) {
       groupNameToId.set(group.title, group.id);
@@ -57,7 +61,7 @@ export async function organizeAllTabs(): Promise<void> {
     if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
 
     for (const rule of rules) {
-    if (matchesRule(tab.url, rule)) {
+      if (matchesRule(tab.url, rule)) {
         let groupId = groupNameToId.get(rule.groupName) ?? -1;
 
         if (groupId === -1) {
