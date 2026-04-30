@@ -4,6 +4,22 @@ console.log('[Background] Tabby Sitter started.');
 
 const tabGroupMap = new Map<number, number>(); // tabId -> groupId
 
+/** Retry a tab mutation once if Chrome transiently rejects it */
+async function retryTabMutation<T>(
+  fn: () => Promise<T>
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (e: any) {
+    const msg = e?.message ?? String(e);
+    if (msg.includes('user may be dragging a tab') || msg.includes('cannot be edited right now')) {
+      await new Promise((r) => setTimeout(r, 300));
+      return await fn();
+    }
+    throw e;
+  }
+}
+
 /** Returns an existing group ID for the name in a specific window, or -1 to signal "create new with next tab" */
 async function findOrReserveGroupInWindow(
   groupName: string,
@@ -14,60 +30,66 @@ async function findOrReserveGroupInWindow(
 }
 
 async function processTab(tab: chrome.tabs.Tab): Promise<void> {
-  if (!tab.id || !tab.url || !tab.windowId) return;
+  if (!tab.id || !tab.windowId) return;
+
+  // Refresh tab state to avoid stale groupId / url
+  let freshTab: chrome.tabs.Tab;
+  try {
+    freshTab = await chrome.tabs.get(tab.id);
+  } catch {
+    return;
+  }
+  if (!freshTab.url) return;
 
   const rules = await getRules();
   const ruleGroupNames = new Set(rules.map((r) => r.groupName));
 
-  // Determine which rule (if any) matches the current URL
-  const matchedRule = rules.find((r) => matchesRule(tab.url!, r)) ?? null;
+  const matchedRule = rules.find((r) => matchesRule(freshTab.url!, r)) ?? null;
+  const currentGroupId = freshTab.groupId ?? -1;
 
-  // Read current tab grouping state
-  const currentGroupId = tab.groupId ?? -1;
-  let isAutoManaged = false;
+  // Resolve current group title (if any)
+  let currentGroupTitle: string | undefined;
   if (currentGroupId !== -1) {
     try {
-      const grp = await chrome.tabGroups.get(currentGroupId);
-      isAutoManaged = ruleGroupNames.has(grp.title ?? '');
+      currentGroupTitle = (await chrome.tabGroups.get(currentGroupId)).title;
     } catch {
-      // group may have been removed
+      /* group closed */
     }
   }
+  const isAutoManaged = !!currentGroupTitle && ruleGroupNames.has(currentGroupTitle);
 
   if (matchedRule) {
-    // Already in the right group -> nothing to do
-    if (
-      currentGroupId !== -1 &&
-      (await chrome.tabGroups.get(currentGroupId)).title === matchedRule.groupName
-    ) {
-      return;
-    }
+    // Already correct -> noop
+    if (currentGroupTitle === matchedRule.groupName) return;
 
-    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, tab.windowId);
-
+    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, freshTab.windowId!);
     if (groupId === -1) {
-      groupId = await chrome.tabs.group({ tabIds: tab.id });
+      groupId = await retryTabMutation(() =>
+        chrome.tabs.group({ tabIds: freshTab.id! })
+      );
       await chrome.tabGroups.update(groupId, {
         title: matchedRule.groupName,
         color: matchedRule.color || 'blue',
       });
     } else {
-      await chrome.tabs.move(tab.id, { index: -1 });
-      await chrome.tabs.group({ tabIds: tab.id, groupId });
+      await retryTabMutation(() => chrome.tabs.move(freshTab.id!, { index: -1 }));
+      await retryTabMutation(() =>
+        chrome.tabs.group({ tabIds: freshTab.id!, groupId })
+      );
     }
 
-    tabGroupMap.set(tab.id, groupId);
+    tabGroupMap.set(freshTab.id!, groupId);
     console.log(
-      `[Background] Tab ${tab.id} moved to group "${matchedRule.groupName}" in window ${tab.windowId}`
+      `[Background] Tab ${freshTab.id} moved to group "${matchedRule.groupName}" in window ${freshTab.windowId}`
     );
     return;
   }
 
   // No rule matched — ungroup only if currently in an auto-managed group
   if (currentGroupId !== -1 && isAutoManaged) {
-    await chrome.tabs.ungroup(tab.id);
-    tabGroupMap.delete(tab.id);
-    console.log(`[Background] Tab ${tab.id} ungrouped (no matching rule)`);
+    await retryTabMutation(() => chrome.tabs.ungroup(freshTab.id!));
+    tabGroupMap.delete(freshTab.id!);
+    console.log(`[Background] Tab ${freshTab.id} ungrouped (no matching rule)`);
   }
 }
 
@@ -91,13 +113,21 @@ export async function organizeAllTabs(): Promise<void> {
 
   for (const tab of tabs) {
     if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
-    const tabId = tab.id;
 
-    const matchedRule = rules.find((r) => matchesRule(tab.url!, r)) ?? null;
-    const currentGroupId = tab.groupId ?? -1;
+    // Refresh tab state inside the loop to avoid stale groupId
+    let freshTab: chrome.tabs.Tab;
+    try {
+      freshTab = await chrome.tabs.get(tab.id);
+    } catch {
+      continue;
+    }
+    if (!freshTab.url) continue;
 
-    let isAutoManaged = false;
+    const matchedRule = rules.find((r) => matchesRule(freshTab.url!, r)) ?? null;
+    const currentGroupId = freshTab.groupId ?? -1;
+
     let currentGroupTitle: string | undefined;
+    let isAutoManaged = false;
     if (currentGroupId !== -1) {
       try {
         const grp = groups.find((g) => g.id === currentGroupId);
@@ -109,31 +139,35 @@ export async function organizeAllTabs(): Promise<void> {
     }
 
     if (matchedRule) {
-      // Already in the correct group -> skip
       if (currentGroupTitle === matchedRule.groupName) continue;
 
       let groupId = groupNameToId.get(matchedRule.groupName) ?? -1;
 
       if (groupId === -1) {
-        groupId = await chrome.tabs.group({ tabIds: tabId });
+        groupId = await retryTabMutation(() =>
+          chrome.tabs.group({ tabIds: freshTab.id! })
+        );
         await chrome.tabGroups.update(groupId, {
           title: matchedRule.groupName,
           color: matchedRule.color || 'blue',
         });
         groupNameToId.set(matchedRule.groupName, groupId);
       } else {
-        await chrome.tabs.move(tabId, { index: -1 });
-        await chrome.tabs.group({ tabIds: tabId, groupId });
+        await retryTabMutation(() => chrome.tabs.move(freshTab.id!, { index: -1 }));
+        await retryTabMutation(() =>
+          chrome.tabs.group({ tabIds: freshTab.id!, groupId })
+        );
       }
 
-      tabGroupMap.set(tabId, groupId);
+      tabGroupMap.set(freshTab.id!, groupId);
       continue;
     }
 
     // No rule matched — ungroup only auto-managed groups
     if (currentGroupId !== -1 && isAutoManaged) {
-      await chrome.tabs.ungroup(tabId);
-      tabGroupMap.delete(tabId);
+      await retryTabMutation(() => chrome.tabs.ungroup(freshTab.id!));
+      tabGroupMap.delete(freshTab.id!);
+      console.log(`[Background] Tab ${freshTab.id} ungrouped (no matching rule)`);
     }
   }
 }
@@ -158,7 +192,7 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         console.error('[Background] organizeAllTabs failed', err);
         sendResponse({ success: false, error: String(err) });
       });
-    return true; // keep channel open for async response
+    return true;
   }
   return false;
 });
