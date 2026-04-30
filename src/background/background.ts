@@ -17,26 +17,57 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   if (!tab.id || !tab.url || !tab.windowId) return;
 
   const rules = await getRules();
-  for (const rule of rules) {
-    if (matchesRule(tab.url, rule)) {
-      let groupId = await findOrReserveGroupInWindow(rule.groupName, tab.windowId);
+  const ruleGroupNames = new Set(rules.map((r) => r.groupName));
 
-      if (groupId === -1) {
-        // Group doesn't exist yet in this window; create it from this tab
-        groupId = await chrome.tabs.group({ tabIds: tab.id });
-        await chrome.tabGroups.update(groupId, {
-          title: rule.groupName,
-          color: rule.color || 'blue',
-        });
-      } else {
-        await chrome.tabs.move(tab.id, { index: -1 });
-        await chrome.tabs.group({ tabIds: tab.id, groupId });
-      }
+  // Determine which rule (if any) matches the current URL
+  const matchedRule = rules.find((r) => matchesRule(tab.url!, r)) ?? null;
 
-      tabGroupMap.set(tab.id, groupId);
-      console.log(`[Background] Tab ${tab.id} moved to group "${rule.groupName}" in window ${tab.windowId}`);
+  // Read current tab grouping state
+  const currentGroupId = tab.groupId ?? -1;
+  let isAutoManaged = false;
+  if (currentGroupId !== -1) {
+    try {
+      const grp = await chrome.tabGroups.get(currentGroupId);
+      isAutoManaged = ruleGroupNames.has(grp.title ?? '');
+    } catch {
+      // group may have been removed
+    }
+  }
+
+  if (matchedRule) {
+    // Already in the right group -> nothing to do
+    if (
+      currentGroupId !== -1 &&
+      (await chrome.tabGroups.get(currentGroupId)).title === matchedRule.groupName
+    ) {
       return;
     }
+
+    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, tab.windowId);
+
+    if (groupId === -1) {
+      groupId = await chrome.tabs.group({ tabIds: tab.id });
+      await chrome.tabGroups.update(groupId, {
+        title: matchedRule.groupName,
+        color: matchedRule.color || 'blue',
+      });
+    } else {
+      await chrome.tabs.move(tab.id, { index: -1 });
+      await chrome.tabs.group({ tabIds: tab.id, groupId });
+    }
+
+    tabGroupMap.set(tab.id, groupId);
+    console.log(
+      `[Background] Tab ${tab.id} moved to group "${matchedRule.groupName}" in window ${tab.windowId}`
+    );
+    return;
+  }
+
+  // No rule matched — ungroup only if currently in an auto-managed group
+  if (currentGroupId !== -1 && isAutoManaged) {
+    await chrome.tabs.ungroup(tab.id);
+    tabGroupMap.delete(tab.id);
+    console.log(`[Background] Tab ${tab.id} ungrouped (no matching rule)`);
   }
 }
 
@@ -47,6 +78,7 @@ export async function organizeAllTabs(): Promise<void> {
 
   const windowId = tabs[0].windowId;
   const rules = await getRules();
+  const ruleGroupNames = new Set(rules.map((r) => r.groupName));
   const groupNameToId = new Map<string, number>();
 
   // Pre-resolve existing groups in this window only
@@ -59,26 +91,49 @@ export async function organizeAllTabs(): Promise<void> {
 
   for (const tab of tabs) {
     if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+    const tabId = tab.id;
 
-    for (const rule of rules) {
-      if (matchesRule(tab.url, rule)) {
-        let groupId = groupNameToId.get(rule.groupName) ?? -1;
+    const matchedRule = rules.find((r) => matchesRule(tab.url!, r)) ?? null;
+    const currentGroupId = tab.groupId ?? -1;
 
-        if (groupId === -1) {
-          groupId = await chrome.tabs.group({ tabIds: tab.id });
-          await chrome.tabGroups.update(groupId, {
-            title: rule.groupName,
-            color: rule.color || 'blue',
-          });
-          groupNameToId.set(rule.groupName, groupId);
-        } else {
-          await chrome.tabs.move(tab.id, { index: -1 });
-          await chrome.tabs.group({ tabIds: tab.id, groupId });
-        }
-
-        tabGroupMap.set(tab.id, groupId);
-        break;
+    let isAutoManaged = false;
+    let currentGroupTitle: string | undefined;
+    if (currentGroupId !== -1) {
+      try {
+        const grp = groups.find((g) => g.id === currentGroupId);
+        currentGroupTitle = grp?.title;
+        isAutoManaged = !!currentGroupTitle && ruleGroupNames.has(currentGroupTitle);
+      } catch {
+        // ignore
       }
+    }
+
+    if (matchedRule) {
+      // Already in the correct group -> skip
+      if (currentGroupTitle === matchedRule.groupName) continue;
+
+      let groupId = groupNameToId.get(matchedRule.groupName) ?? -1;
+
+      if (groupId === -1) {
+        groupId = await chrome.tabs.group({ tabIds: tabId });
+        await chrome.tabGroups.update(groupId, {
+          title: matchedRule.groupName,
+          color: matchedRule.color || 'blue',
+        });
+        groupNameToId.set(matchedRule.groupName, groupId);
+      } else {
+        await chrome.tabs.move(tabId, { index: -1 });
+        await chrome.tabs.group({ tabIds: tabId, groupId });
+      }
+
+      tabGroupMap.set(tabId, groupId);
+      continue;
+    }
+
+    // No rule matched — ungroup only auto-managed groups
+    if (currentGroupId !== -1 && isAutoManaged) {
+      await chrome.tabs.ungroup(tabId);
+      tabGroupMap.delete(tabId);
     }
   }
 }
