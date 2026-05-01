@@ -57,26 +57,11 @@ function renderRules(rules: GroupRule[]) {
           ${renderPatterns(r.patterns, r.matchMode)}
         </div>
       </div>
-      <button class="outline small" data-id="${r.id}">Remove</button>
+      <button class="outline small" data-remove="${r.id}">Remove</button>
     </div>
   `
     )
     .join('');
-
-  list.querySelectorAll('button[data-id]').forEach((btn) => {
-    btn.addEventListener('click', async (e) => {
-      const id = (e.currentTarget as HTMLButtonElement).dataset.id;
-      if (!id) return;
-      await removeRule(id);
-      await refresh();
-      showStatus('Rule removed');
-    });
-  });
-}
-
-async function refresh() {
-  const rules = await getRules();
-  renderRules(rules);
 }
 
 function parsePatterns(text: string): string[] {
@@ -87,6 +72,13 @@ function parsePatterns(text: string): string[] {
 }
 
 async function init() {
+  // Set version from manifest
+  const manifest = chrome.runtime.getManifest();
+  const versionEl = $('version');
+  if (versionEl) {
+    versionEl.textContent = `v${manifest.version}`;
+  }
+
   await refresh();
 
   // Tab switching
@@ -95,6 +87,28 @@ async function init() {
       const tab = (btn as HTMLElement).dataset.tab || 'rules';
       setActiveTab(tab);
     });
+  });
+
+  // Event delegation for rule list actions
+  $('rulesList')?.addEventListener('click', async (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-remove]');
+    if (!btn) return;
+    const id = (btn as HTMLElement).dataset.remove;
+    if (!id) return;
+    await removeRule(id);
+    await refresh();
+    showStatus('Rule removed');
+  });
+
+  // Event delegation for rule list actions
+  $('rulesList')?.addEventListener('click', async (e) => {
+    const btn = (e.target as HTMLElement).closest('[data-remove]');
+    if (!btn) return;
+    const id = (btn as HTMLElement).dataset.remove;
+    if (!id) return;
+    await removeRule(id);
+    await refresh();
+    showStatus('Rule removed');
   });
 
   // Add Rule

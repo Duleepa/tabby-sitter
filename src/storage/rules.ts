@@ -15,10 +15,13 @@ export interface RuleStorage {
   rules: GroupRule[];
 }
 
-export async function getRules(): Promise<GroupRule[]> {
-  const result = (await chrome.storage.local.get('rules')) as { rules?: any[] };
-  const raw = result.rules || [];
-  // Minimal runtime shim for old single-pattern storage (no migration writeback)
+let cachedRules: GroupRule[] | null = null;
+
+function invalidateCache(): void {
+  cachedRules = null;
+}
+
+function parseRawRules(raw: any[]): GroupRule[] {
   return raw.map((r) => ({
     id: r.id || '',
     patterns: r.patterns || (r.pattern ? [r.pattern] : []),
@@ -29,7 +32,23 @@ export async function getRules(): Promise<GroupRule[]> {
   })) as GroupRule[];
 }
 
+export async function getRules(): Promise<GroupRule[]> {
+  if (cachedRules !== null) return cachedRules;
+
+  const result = (await chrome.storage.local.get('rules')) as { rules?: any[] };
+  const raw = result.rules || [];
+  cachedRules = parseRawRules(raw);
+  return cachedRules;
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.rules) {
+    invalidateCache();
+  }
+});
+
 export async function saveRules(rules: GroupRule[]): Promise<void> {
+  invalidateCache();
   await chrome.storage.local.set({ rules });
 }
 
