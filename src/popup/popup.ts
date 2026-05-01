@@ -3,6 +3,8 @@ import {
   exportConfigFile,
   importConfigFile,
   downloadStarterConfig,
+  getSettings,
+  saveSettings,
 } from '../storage/config';
 
 const $ = (id: string) => document.getElementById(id);
@@ -359,6 +361,17 @@ async function init() {
   $('createConfig')?.addEventListener('click', () => {
     downloadStarterConfig();
     showStatus('Starter config downloaded!');
+  });
+
+  // Load and save domain grouping setting
+  const settings = await getSettings();
+  ($('groupUnmatchedByDomain') as HTMLInputElement).checked = settings.groupUnmatchedByDomain;
+
+  $('groupUnmatchedByDomain')?.addEventListener('change', async () => {
+    const checked = ($('groupUnmatchedByDomain') as HTMLInputElement).checked;
+    const current = await getSettings();
+    current.groupUnmatchedByDomain = checked;
+    await saveSettings(current);
   });
 }
 

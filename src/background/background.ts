@@ -1,4 +1,5 @@
 import { getRules, getActiveRules, matchesRule } from '../storage/rules';
+import { getSettings } from '../storage/config';
 
 console.log('[Background] Tabby Sitter started.');
 
@@ -164,6 +165,48 @@ export async function organizeAllTabs(): Promise<void> {
   // Batch ungroup
   if (tabsToUngroup.length > 0) {
     await retryTabMutation(() => chrome.tabs.ungroup(tabsToUngroup));
+  }
+
+  const settings = await getSettings();
+  if (settings.groupUnmatchedByDomain) {
+    await new Promise((r) => setTimeout(r, 200));
+    const freshTabs = await chrome.tabs.query({ windowId });
+    await groupUnmatchedByDomain(freshTabs);
+  }
+}
+
+async function groupUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
+  const unmatchedByHost = new Map<string, number[]>();
+
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+    if (tab.groupId !== -1) continue;
+
+    try {
+      const hostname = new URL(tab.url).hostname;
+      if (!unmatchedByHost.has(hostname)) {
+        unmatchedByHost.set(hostname, []);
+      }
+      unmatchedByHost.get(hostname)!.push(tab.id);
+    } catch {
+      continue;
+    }
+  }
+
+  const sorted = [...unmatchedByHost.entries()].sort((a, b) =>
+    a[0].localeCompare(b[0])
+  );
+
+  for (const [hostname, tabIds] of sorted) {
+    if (tabIds.length < 2) continue;
+
+    const groupId = await retryTabMutation(() =>
+      chrome.tabs.group({ tabIds })
+    );
+    await chrome.tabGroups.update(groupId, {
+      title: hostname.length > 20 ? hostname.slice(0, 18) + '\u2026' : hostname,
+      color: 'grey',
+    });
   }
 }
 
