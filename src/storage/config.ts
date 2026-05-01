@@ -72,7 +72,7 @@ export async function importConfigFile(file: File): Promise<GroupRule[]> {
     groupName: (r.groupName || '') as string,
     description: r.description as string | undefined,
     color: r.color as chrome.tabGroups.ColorEnum | undefined,
-    matchMode: VALID_MATCH_MODES.has(r.matchMode) ? r.matchMode : 'contains',
+    matchMode: VALID_MATCH_MODES.has(String(r.matchMode)) ? (r.matchMode as 'contains' | 'regex') : 'contains',
   }));
 
   if (rules.some((r) => r.patterns.length === 0)) {

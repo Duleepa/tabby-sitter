@@ -1,11 +1,12 @@
-import { addRule, getRules, removeRule, type GroupRule, type MatchMode } from '../storage/rules';
+import { addRule, getRules, removeRule, updateRule, type GroupRule, type MatchMode } from '../storage/rules';
 import {
   exportConfigFile,
   importConfigFile,
   downloadStarterConfig,
 } from '../storage/config';
 
-const $ = (id: string) => document.getElementById(id) as HTMLElement | null;
+const $ = (id: string) => document.getElementById(id);
+const $$ = (sel: string) => document.querySelector(sel);
 
 function showStatus(msg: string) {
   const el = $('status');
@@ -57,11 +58,48 @@ function renderRules(rules: GroupRule[]) {
           ${renderPatterns(r.patterns, r.matchMode)}
         </div>
       </div>
-      <button class="outline small" data-remove="${r.id}">Remove</button>
+      <div class="rule-actions">
+        <button class="small" data-edit="${r.id}">Edit</button>
+        <button class="outline small" data-remove="${r.id}">Remove</button>
+      </div>
     </div>
   `
     )
     .join('');
+}
+
+function renderEditForm(rule: GroupRule): string {
+  const colors = ['blue', 'red', 'yellow', 'green', 'cyan', 'purple', 'orange', 'pink', 'grey'];
+  const colorOptions = colors.map((c) =>
+    `<option value="${c}"${c === rule.color ? ' selected' : ''}>${c.charAt(0).toUpperCase() + c.slice(1)}</option>`
+  ).join('');
+
+  return `
+    <div class="rule-item rule-item-edit" data-id="${rule.id}">
+      <label class="edit-label">Patterns</label>
+      <textarea class="edit-patterns" rows="2">${escapeHtml(rule.patterns.join(', '))}</textarea>
+
+      <label class="edit-label">Match Mode</label>
+      <select class="edit-matchMode">
+        <option value="contains"${rule.matchMode === 'contains' ? ' selected' : ''}>Contains</option>
+        <option value="regex"${rule.matchMode === 'regex' ? ' selected' : ''}>Regex</option>
+      </select>
+
+      <label class="edit-label">Group Name</label>
+      <input class="edit-groupName" type="text" value="${escapeHtml(rule.groupName)}" />
+
+      <label class="edit-label">Color</label>
+      <select class="edit-color">${colorOptions}</select>
+
+      <label class="edit-label">Description (optional)</label>
+      <input class="edit-description" type="text" value="${escapeHtml(rule.description || '')}" />
+
+      <div class="edit-actions">
+        <button class="small" data-save="${rule.id}">Save</button>
+        <button class="outline small" data-cancel="${rule.id}">Cancel</button>
+      </div>
+    </div>
+  `;
 }
 
 function parsePatterns(text: string): string[] {
@@ -69,6 +107,11 @@ function parsePatterns(text: string): string[] {
     .split(/[\n,;]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+async function refresh() {
+  const rules = await getRules();
+  renderRules(rules);
 }
 
 async function init() {
@@ -91,24 +134,78 @@ async function init() {
 
   // Event delegation for rule list actions
   $('rulesList')?.addEventListener('click', async (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-remove]');
-    if (!btn) return;
-    const id = (btn as HTMLElement).dataset.remove;
-    if (!id) return;
-    await removeRule(id);
-    await refresh();
-    showStatus('Rule removed');
-  });
+    const target = e.target as HTMLElement;
 
-  // Event delegation for rule list actions
-  $('rulesList')?.addEventListener('click', async (e) => {
-    const btn = (e.target as HTMLElement).closest('[data-remove]');
-    if (!btn) return;
-    const id = (btn as HTMLElement).dataset.remove;
-    if (!id) return;
-    await removeRule(id);
-    await refresh();
-    showStatus('Rule removed');
+    // Remove button
+    const removeBtn = target.closest('[data-remove]');
+    if (removeBtn) {
+      const id = (removeBtn as HTMLElement).dataset.remove;
+      if (!id) return;
+      await removeRule(id);
+      await refresh();
+      showStatus('Rule removed');
+      return;
+    }
+
+    // Edit button
+    const editBtn = target.closest('[data-edit]');
+    if (editBtn) {
+      const id = (editBtn as HTMLElement).dataset.edit;
+      if (!id) return;
+      const rules = await getRules();
+      const rule = rules.find((r) => r.id === id);
+      if (!rule) return;
+      const list = $('rulesList');
+      if (list) list.innerHTML = renderEditForm(rule);
+      return;
+    }
+
+    // Save button (edit form)
+    const saveBtn = target.closest('[data-save]');
+    if (saveBtn) {
+      const id = (saveBtn as HTMLElement).dataset.save;
+      if (!id) return;
+
+      const patternsRaw = ($$('.edit-patterns') as HTMLTextAreaElement)?.value.trim();
+      const groupName = ($$('.edit-groupName') as HTMLInputElement)?.value.trim();
+      const color = ($$('.edit-color') as HTMLSelectElement)?.value as chrome.tabGroups.ColorEnum;
+      const matchMode = ($$('.edit-matchMode') as HTMLSelectElement)?.value as MatchMode;
+      const description = ($$('.edit-description') as HTMLInputElement)?.value.trim();
+
+      const patterns = parsePatterns(patternsRaw);
+
+      if (patterns.length === 0 || !groupName) {
+        showStatus('At least one pattern and a group name are required');
+        return;
+      }
+
+      if (matchMode === 'regex') {
+        const invalid = patterns.find((p) => {
+          try { new RegExp(p); return false; }
+          catch { return true; }
+        });
+        if (invalid !== undefined) {
+          showStatus(`Invalid regex: "${invalid}"`);
+          return;
+        }
+      }
+
+      const result = await updateRule(id, { patterns, groupName, color, matchMode, description: description || undefined });
+      if (!result) {
+        showStatus('Rule not found');
+        return;
+      }
+      await refresh();
+      showStatus('Rule updated');
+      return;
+    }
+
+    // Cancel button (edit form)
+    const cancelBtn = target.closest('[data-cancel]');
+    if (cancelBtn) {
+      await refresh();
+      return;
+    }
   });
 
   // Add Rule
