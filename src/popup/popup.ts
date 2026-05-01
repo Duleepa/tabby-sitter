@@ -6,6 +6,7 @@ import {
 } from '../storage/config';
 
 const $ = (id: string) => document.getElementById(id);
+const $$ = (sel: string) => document.querySelector(sel);
 
 function showStatus(msg: string) {
   const el = $('status');
@@ -165,11 +166,11 @@ async function init() {
       const id = (saveBtn as HTMLElement).dataset.save;
       if (!id) return;
 
-      const patternsRaw = ($('.edit-patterns') as HTMLTextAreaElement)?.value.trim();
-      const groupName = ($('.edit-groupName') as HTMLInputElement)?.value.trim();
-      const color = ($('.edit-color') as HTMLSelectElement)?.value as chrome.tabGroups.ColorEnum;
-      const matchMode = ($('.edit-matchMode') as HTMLSelectElement)?.value as MatchMode;
-      const description = ($('.edit-description') as HTMLInputElement)?.value.trim();
+      const patternsRaw = ($$('.edit-patterns') as HTMLTextAreaElement)?.value.trim();
+      const groupName = ($$('.edit-groupName') as HTMLInputElement)?.value.trim();
+      const color = ($$('.edit-color') as HTMLSelectElement)?.value as chrome.tabGroups.ColorEnum;
+      const matchMode = ($$('.edit-matchMode') as HTMLSelectElement)?.value as MatchMode;
+      const description = ($$('.edit-description') as HTMLInputElement)?.value.trim();
 
       const patterns = parsePatterns(patternsRaw);
 
