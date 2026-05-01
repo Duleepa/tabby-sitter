@@ -305,10 +305,14 @@ async function init() {
     const file = input.files?.[0];
     if (!file) return;
 
+    const action = confirm('Merge with existing rules?\n\nOK = Merge\nCancel = Replace all');
+    const mode = action ? 'merge' : 'replace';
+    const actionLabel = mode === 'merge' ? 'Merged' : 'Replaced';
+
     try {
-      await importConfigFile(file);
+      await importConfigFile(file, mode);
       await refresh();
-      showStatus('Config imported!');
+      showStatus(`Config ${actionLabel}!`);
     } catch (err) {
       showStatus('Import failed: ' + String(err));
     } finally {

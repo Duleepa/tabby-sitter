@@ -40,7 +40,7 @@ export async function exportConfigFile(): Promise<void> {
  * Import rules from a JSON config file dropped/picked by the user.
  * Accepts new schema (patterns + matchMode) and old single-pattern schema.
  */
-export async function importConfigFile(file: File): Promise<GroupRule[]> {
+export async function importConfigFile(file: File, mode: 'replace' | 'merge' = 'replace'): Promise<GroupRule[]> {
   // Reject unreasonably large files as a hardening measure
   const MAX_SIZE = 1024 * 1024; // 1 MB
   if (file.size > MAX_SIZE) {
@@ -77,6 +77,15 @@ export async function importConfigFile(file: File): Promise<GroupRule[]> {
 
   if (rules.some((r) => r.patterns.length === 0)) {
     throw new Error('Invalid rule: patterns cannot be empty');
+  }
+
+  if (mode === 'merge') {
+    const existing = await getRules();
+    const existingIds = new Set(existing.map((r) => r.id));
+    const newRules = rules.filter((r) => !existingIds.has(r.id));
+    const merged = [...existing, ...newRules];
+    await saveRules(merged);
+    return merged;
   }
 
   await saveRules(rules);
