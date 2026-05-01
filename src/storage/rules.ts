@@ -1,3 +1,5 @@
+import { generateId } from '../utils/id';
+
 export type MatchMode = 'contains' | 'regex';
 
 export interface GroupRule {
@@ -11,10 +13,6 @@ export interface GroupRule {
 
 export interface RuleStorage {
   rules: GroupRule[];
-}
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 export async function getRules(): Promise<GroupRule[]> {
