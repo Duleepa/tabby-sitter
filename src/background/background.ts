@@ -167,13 +167,29 @@ export async function organizeAllTabs(): Promise<void> {
 
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   if (changeInfo.url && tab.id) {
-    processTab(tab);
+    processTab(tab).catch((err) =>
+      console.error('[Background] processTab failed on onUpdated', err)
+    );
   }
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
   if (tab.id && tab.url) {
-    setTimeout(() => processTab(tab), 100);
+    setTimeout(() => {
+      processTab(tab).catch((err) =>
+        console.error('[Background] processTab failed on onCreated', err)
+      );
+    }, 100);
+  }
+});
+
+chrome.tabs.onCreated.addListener((tab) => {
+  if (tab.id && tab.url) {
+    setTimeout(() => {
+      processTab(tab).catch((err) =>
+        console.error('[Background] processTab failed on onCreated', err)
+      );
+    }, 100);
   }
 });
 
