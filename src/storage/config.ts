@@ -161,3 +161,20 @@ export function downloadStarterConfig(): void {
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export interface ExtensionSettings {
+  groupUnmatchedByDomain: boolean;
+}
+
+const DEFAULT_SETTINGS: ExtensionSettings = {
+  groupUnmatchedByDomain: false,
+};
+
+export async function getSettings(): Promise<ExtensionSettings> {
+  const result = await chrome.storage.local.get('settings');
+  return { ...DEFAULT_SETTINGS, ...(result.settings as Partial<ExtensionSettings>) };
+}
+
+export async function saveSettings(settings: ExtensionSettings): Promise<void> {
+  await chrome.storage.local.set({ settings });
+}

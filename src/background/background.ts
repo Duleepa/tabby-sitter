@@ -1,4 +1,5 @@
 import { getRules, getActiveRules, matchesRule } from '../storage/rules';
+import { getSettings } from '../storage/config';
 
 console.log('[Background] Tabby Sitter started.');
 
@@ -164,6 +165,37 @@ export async function organizeAllTabs(): Promise<void> {
   // Batch ungroup
   if (tabsToUngroup.length > 0) {
     await retryTabMutation(() => chrome.tabs.ungroup(tabsToUngroup));
+  }
+
+  const settings = await getSettings();
+  if (settings.groupUnmatchedByDomain) {
+    await new Promise((r) => setTimeout(r, 200));
+    const freshTabs = await chrome.tabs.query({ windowId });
+    await sortUnmatchedByDomain(freshTabs);
+  }
+}
+
+async function sortUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
+  const unmatched: { id: number; hostname: string }[] = [];
+
+  for (const tab of tabs) {
+    if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+    if (tab.groupId !== -1) continue;
+
+    try {
+      const hostname = new URL(tab.url).hostname;
+      unmatched.push({ id: tab.id, hostname });
+    } catch {
+      continue;
+    }
+  }
+
+  unmatched.sort((a, b) => a.hostname.localeCompare(b.hostname));
+
+  for (const tab of unmatched) {
+    await retryTabMutation(() =>
+      chrome.tabs.move(tab.id, { index: -1 })
+    );
   }
 }
 

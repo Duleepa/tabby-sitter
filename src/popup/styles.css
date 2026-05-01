@@ -190,7 +190,16 @@ button.icon-btn svg {
 }
 .card h2 {
   font-size: 0.95rem;
-  margin: 0 0 0.5rem;
+  margin: 0;
+}
+.card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.toggle-label {
+  margin-bottom: 0;
 }
 
 /* Inputs */
