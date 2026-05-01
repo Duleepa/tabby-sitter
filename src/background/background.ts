@@ -197,3 +197,15 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   }
   return false;
 });
+
+chrome.commands.onCommand.addListener((command) => {
+  if (command === 'organize-tabs') {
+    organizeAllTabs();
+  }
+});
+
+chrome.commands.onCommand.addListener((command) => {
+  if (command === 'organize-tabs') {
+    organizeAllTabs();
+  }
+});
