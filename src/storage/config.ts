@@ -41,6 +41,12 @@ export async function exportConfigFile(): Promise<void> {
  * Accepts new schema (patterns + matchMode) and old single-pattern schema.
  */
 export async function importConfigFile(file: File): Promise<GroupRule[]> {
+  // Reject unreasonably large files as a hardening measure
+  const MAX_SIZE = 1024 * 1024; // 1 MB
+  if (file.size > MAX_SIZE) {
+    throw new Error('Config file is too large (max 1 MB)');
+  }
+
   const text = await file.text();
   const parsed = JSON.parse(text) as ConfigFile;
 

@@ -56,6 +56,8 @@ export function matchesRule(url: string, rule: GroupRule): boolean {
     return rule.patterns.some((p) => {
       if (!p) return false;
       if (rule.matchMode === 'regex') {
+        // Prevent extremely long patterns that could cause catastrophic backtracking
+        if (p.length > 5000) return false;
         try {
           return new RegExp(p, 'i').test(href);
         } catch {
