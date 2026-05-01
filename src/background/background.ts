@@ -126,11 +126,10 @@ export async function organizeAllTabs(): Promise<void> {
     let isAutoManaged = false;
     if (currentGroupId !== -1) {
       try {
-        const grp = groups.find((g) => g.id === currentGroupId);
-        currentGroupTitle = grp?.title;
+        currentGroupTitle = (await chrome.tabGroups.get(currentGroupId)).title;
         isAutoManaged = !!currentGroupTitle && ruleGroupNames.has(currentGroupTitle);
       } catch {
-        // ignore
+        // group closed
       }
     }
 
