@@ -142,6 +142,13 @@ async function init() {
     if (removeBtn) {
       const id = (removeBtn as HTMLElement).dataset.remove;
       if (!id) return;
+
+      const rules = await getRules();
+      const rule = rules.find((r) => r.id === id);
+      if (!rule) return;
+
+      if (!confirm(`Remove rule "${rule.groupName}"?`)) return;
+
       await removeRule(id);
       await refresh();
       showStatus('Rule removed');
