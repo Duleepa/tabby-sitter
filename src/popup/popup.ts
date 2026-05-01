@@ -102,7 +102,8 @@ function renderEditForm(rule: GroupRule): string {
   `;
 }
 
-function parsePatterns(text: string): string[] {
+function parsePatterns(text: string | undefined): string[] {
+  if (!text) return [];
   return text
     .split(/[\n,;]+/)
     .map((s) => s.trim())
