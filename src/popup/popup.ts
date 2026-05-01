@@ -5,7 +5,7 @@ import {
   downloadStarterConfig,
 } from '../storage/config';
 
-const $ = (id: string) => document.getElementById(id) as HTMLElement | null;
+const $ = (id: string) => document.getElementById(id);
 
 function showStatus(msg: string) {
   const el = $('status');
@@ -106,6 +106,11 @@ function parsePatterns(text: string): string[] {
     .split(/[\n,;]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+async function refresh() {
+  const rules = await getRules();
+  renderRules(rules);
 }
 
 async function init() {

@@ -29,7 +29,7 @@ function parseRawRules(raw: any[]): GroupRule[] {
     description: r.description,
     color: r.color,
     matchMode: r.matchMode || 'contains',
-  })) as GroupRule[];
+  }));
 }
 
 export async function getRules(): Promise<GroupRule[]> {
@@ -63,15 +63,6 @@ export async function addRule(rule: Omit<GroupRule, 'id'>): Promise<GroupRule> {
 export async function removeRule(id: string): Promise<void> {
   const rules = (await getRules()).filter((r) => r.id !== id);
   await saveRules(rules);
-}
-
-export async function updateRule(id: string, updates: Partial<GroupRule>): Promise<GroupRule | null> {
-  const rules = await getRules();
-  const index = rules.findIndex((r) => r.id === id);
-  if (index === -1) return null;
-  rules[index] = { ...rules[index], ...updates };
-  await saveRules(rules);
-  return rules[index];
 }
 
 export async function updateRule(id: string, updates: Partial<GroupRule>): Promise<GroupRule | null> {

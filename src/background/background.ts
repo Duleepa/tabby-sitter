@@ -60,7 +60,7 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
     // Already correct -> noop
     if (currentGroupTitle === matchedRule.groupName) return;
 
-    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, freshTab.windowId!);
+    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, freshTab.windowId);
     if (groupId === -1) {
       groupId = await retryTabMutation(() =>
         chrome.tabs.group({ tabIds: freshTab.id! })
@@ -126,9 +126,9 @@ export async function organizeAllTabs(): Promise<void> {
       if (!tabsToGroup.has(matchedRule.groupName)) {
         tabsToGroup.set(matchedRule.groupName, []);
       }
-      tabsToGroup.get(matchedRule.groupName)!.push(tab.id!);
+      tabsToGroup.get(matchedRule.groupName)!.push(tab.id);
     } else if (currentGroupId !== -1 && isAutoManaged) {
-      tabsToUngroup.push(tab.id!);
+      tabsToUngroup.push(tab.id);
     }
   }
 
