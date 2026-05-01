@@ -97,6 +97,18 @@ export function getActiveRules(rules: GroupRule[]): GroupRule[] {
   return rules.filter((r) => r.enabled !== false);
 }
 
+export async function reorderRule(id: string, direction: 'up' | 'down'): Promise<void> {
+  const rules = await getRules();
+  const index = rules.findIndex((r) => r.id === id);
+  if (index === -1) return;
+
+  const newIndex = direction === 'up' ? index - 1 : index + 1;
+  if (newIndex < 0 || newIndex >= rules.length) return;
+
+  [rules[index], rules[newIndex]] = [rules[newIndex], rules[index]];
+  await saveRules(rules);
+}
+
 /**
  * Check whether a URL matches any of the patterns in a rule.
  * Uses the full URL (href) for both contains and regex modes.

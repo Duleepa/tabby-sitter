@@ -1,4 +1,4 @@
-import { addRule, getRules, removeRule, toggleRule, updateRule, type GroupRule, type MatchMode } from '../storage/rules';
+import { addRule, getRules, removeRule, reorderRule, toggleRule, updateRule, type GroupRule, type MatchMode } from '../storage/rules';
 import {
   exportConfigFile,
   importConfigFile,
@@ -49,7 +49,7 @@ function renderRules(rules: GroupRule[]) {
 
   list.innerHTML = rules
     .map(
-      (r) => `
+      (r, i) => `
     <div class="rule-item${r.enabled === false ? ' rule-disabled' : ''}" data-id="${r.id}">
       <div class="rule-info">
         <div class="rule-header">
@@ -61,6 +61,12 @@ function renderRules(rules: GroupRule[]) {
         </div>
       </div>
       <div class="rule-actions">
+        <button class="icon-btn" data-reorder="up" data-id="${r.id}"${i === 0 ? ' disabled' : ''} title="Move up">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+        </button>
+        <button class="icon-btn" data-reorder="down" data-id="${r.id}"${i === rules.length - 1 ? ' disabled' : ''} title="Move down">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </button>
         <button class="icon-btn" data-edit="${r.id}" title="Edit">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         </button>
@@ -171,6 +177,17 @@ async function init() {
       if (enabled === null) return;
       await refresh();
       showStatus(enabled ? 'Rule enabled' : 'Rule disabled');
+      return;
+    }
+
+    // Reorder buttons
+    const reorderBtn = target.closest('[data-reorder]');
+    if (reorderBtn) {
+      const direction = (reorderBtn as HTMLElement).dataset.reorder as 'up' | 'down';
+      const id = (reorderBtn as HTMLElement).dataset.id;
+      if (!id || !direction) return;
+      await reorderRule(id, direction);
+      await refresh();
       return;
     }
 
