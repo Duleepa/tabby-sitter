@@ -1,4 +1,4 @@
-import { getRules, matchesRule } from '../storage/rules';
+import { getRules, getActiveRules, matchesRule } from '../storage/rules';
 
 console.log('[Background] Tabby Sitter started.');
 
@@ -39,7 +39,7 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   }
   if (!freshTab.url) return;
 
-  const rules = await getRules();
+  const rules = getActiveRules(await getRules());
   const ruleGroupNames = new Set(rules.map((r) => r.groupName));
 
   const matchedRule = rules.find((r) => matchesRule(freshTab.url!, r)) ?? null;
@@ -95,7 +95,7 @@ export async function organizeAllTabs(): Promise<void> {
   if (tabs.length === 0) return;
 
   const windowId = tabs[0].windowId;
-  const rules = await getRules();
+  const rules = getActiveRules(await getRules());
   const ruleGroupNames = new Set(rules.map((r) => r.groupName));
 
   // Pre-fetch all groups in this window

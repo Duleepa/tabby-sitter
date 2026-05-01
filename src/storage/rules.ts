@@ -9,6 +9,7 @@ export interface GroupRule {
   description?: string;
   color?: chrome.tabGroups.ColorEnum;
   matchMode: MatchMode;
+  enabled?: boolean;
 }
 
 export interface RuleStorage {
@@ -81,6 +82,19 @@ export async function updateRule(id: string, updates: Partial<GroupRule>): Promi
   rules[index] = { ...rules[index], ...updates };
   await saveRules(rules);
   return rules[index];
+}
+
+export async function toggleRule(id: string): Promise<boolean | null> {
+  const rules = await getRules();
+  const rule = rules.find((r) => r.id === id);
+  if (!rule) return null;
+  rule.enabled = rule.enabled === false ? true : false;
+  await saveRules(rules);
+  return rule.enabled;
+}
+
+export function getActiveRules(rules: GroupRule[]): GroupRule[] {
+  return rules.filter((r) => r.enabled !== false);
 }
 
 /**

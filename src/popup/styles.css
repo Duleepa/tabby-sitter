@@ -123,6 +123,24 @@ button.small {
   padding: 0.35rem 0.6rem;
   font-size: 0.75rem;
 }
+button.icon-btn {
+  padding: 0.3rem;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  border: 1px solid transparent;
+}
+button.icon-btn:hover {
+  transform: none;
+  color: var(--primary);
+  border-color: var(--border);
+  background: var(--bg);
+}
+button.icon-btn svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
 
 /* Tabs */
 .tabs {
@@ -228,23 +246,70 @@ label {
 .rule-item:last-child {
   border-bottom: none;
 }
-.rule-color-dot {
+.rule-pill {
   display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+.rule-toggle {
+  appearance: none;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--border);
+  position: relative;
+  cursor: pointer;
   flex-shrink: 0;
-  align-self: flex-start;
-  margin-top: 0.15rem;
+  transition: background 0.2s;
+}
+.rule-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.2s;
+}
+.rule-toggle:checked {
+  background: var(--primary);
+}
+.rule-toggle:checked::after {
+  transform: translateX(16px);
+}
+.rule-disabled {
+  opacity: 0.5;
+}
+.rule-disabled .rule-title {
+  text-decoration: line-through;
 }
 .rule-actions {
   display: flex;
-  gap: 0.35rem;
+  gap: 0.25rem;
+  align-items: center;
   flex-shrink: 0;
 }
 .rule-info {
   flex: 1;
   min-width: 0;
+}
+.rule-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.rule-desc {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .rule-title {
   font-weight: 600;
