@@ -216,6 +216,11 @@ label {
 .rule-item:last-child {
   border-bottom: none;
 }
+.rule-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
 .rule-info {
   flex: 1;
   min-width: 0;
@@ -267,4 +272,64 @@ footer .sep {
   text-align: center;
   color: var(--muted);
   padding: 2rem 0;
+}
+
+/* Edit form */
+.rule-item-edit {
+  display: block;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.rule-item-edit:last-child {
+  border-bottom: none;
+}
+.edit-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+  margin-top: 0.4rem;
+}
+.edit-label:first-child {
+  margin-top: 0;
+}
+.edit-patterns {
+  min-height: 2.5rem;
+  margin-bottom: 0.3rem;
+}
+.edit-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+/* Edit form */
+.rule-item-edit {
+  display: block;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.rule-item-edit:last-child {
+  border-bottom: none;
+}
+.edit-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+  margin-top: 0.4rem;
+}
+.edit-label:first-child {
+  margin-top: 0;
+}
+.edit-patterns {
+  min-height: 2.5rem;
+  margin-bottom: 0.3rem;
+}
+.edit-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
 }

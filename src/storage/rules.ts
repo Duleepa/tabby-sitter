@@ -65,6 +65,24 @@ export async function removeRule(id: string): Promise<void> {
   await saveRules(rules);
 }
 
+export async function updateRule(id: string, updates: Partial<GroupRule>): Promise<GroupRule | null> {
+  const rules = await getRules();
+  const index = rules.findIndex((r) => r.id === id);
+  if (index === -1) return null;
+  rules[index] = { ...rules[index], ...updates };
+  await saveRules(rules);
+  return rules[index];
+}
+
+export async function updateRule(id: string, updates: Partial<GroupRule>): Promise<GroupRule | null> {
+  const rules = await getRules();
+  const index = rules.findIndex((r) => r.id === id);
+  if (index === -1) return null;
+  rules[index] = { ...rules[index], ...updates };
+  await saveRules(rules);
+  return rules[index];
+}
+
 /**
  * Check whether a URL matches any of the patterns in a rule.
  * Uses the full URL (href) for both contains and regex modes.
