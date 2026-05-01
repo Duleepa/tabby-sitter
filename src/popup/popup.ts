@@ -51,6 +51,7 @@ function renderRules(rules: GroupRule[]) {
     .map(
       (r) => `
     <div class="rule-item" data-id="${r.id}">
+      <span class="rule-color-dot" style="background-color: var(--color-${r.color || 'blue'})"></span>
       <div class="rule-info">
         <div class="rule-title">${escapeHtml(r.description || r.groupName)}</div>
         <div class="rule-meta">
