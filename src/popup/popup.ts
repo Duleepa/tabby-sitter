@@ -235,7 +235,11 @@ async function init() {
       }
     }
 
-    await addRule({ patterns, groupName, color, matchMode, description: description || undefined });
+    const result = await addRule({ patterns, groupName, color, matchMode, description: description || undefined });
+    if (!result) {
+      showStatus('A rule with these patterns and group name already exists');
+      return;
+    }
 
     ($('patterns') as HTMLTextAreaElement).value = '';
     ($('groupName') as HTMLInputElement).value = '';

@@ -32,6 +32,14 @@ function parseRawRules(raw: any[]): GroupRule[] {
   }));
 }
 
+function rulesAreDuplicate(a: GroupRule, b: Omit<GroupRule, 'id'>): boolean {
+  if (a.groupName !== b.groupName) return false;
+  if (a.matchMode !== b.matchMode) return false;
+  if (a.patterns.length !== b.patterns.length) return false;
+  const aSet = new Set(a.patterns.map((p) => p.toLowerCase()));
+  return b.patterns.every((p) => aSet.has(p.toLowerCase()));
+}
+
 export async function getRules(): Promise<GroupRule[]> {
   if (cachedRules !== null) return cachedRules;
 
@@ -52,8 +60,9 @@ export async function saveRules(rules: GroupRule[]): Promise<void> {
   await chrome.storage.local.set({ rules });
 }
 
-export async function addRule(rule: Omit<GroupRule, 'id'>): Promise<GroupRule> {
+export async function addRule(rule: Omit<GroupRule, 'id'>): Promise<GroupRule | null> {
   const rules = await getRules();
+  if (rules.some((r) => rulesAreDuplicate(r, rule))) return null;
   const newRule: GroupRule = { ...rule, id: generateId() };
   rules.push(newRule);
   await saveRules(rules);
