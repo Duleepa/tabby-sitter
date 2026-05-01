@@ -89,8 +89,3 @@ export function matchesRule(url: string, rule: GroupRule): boolean {
     return false;
   }
 }
-
-/** @deprecated Kept for any external callers; prefer matchesRule */
-export function matchesPattern(_url: string, _pattern: string): boolean {
-  throw new Error('matchesPattern is removed; use matchesRule instead');
-}
