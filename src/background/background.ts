@@ -171,12 +171,12 @@ export async function organizeAllTabs(): Promise<void> {
   if (settings.groupUnmatchedByDomain) {
     await new Promise((r) => setTimeout(r, 200));
     const freshTabs = await chrome.tabs.query({ windowId });
-    await groupUnmatchedByDomain(freshTabs);
+    await sortUnmatchedByDomain(freshTabs);
   }
 }
 
-async function groupUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
-  const unmatchedByHost = new Map<string, number[]>();
+async function sortUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
+  const unmatched: { id: number; hostname: string }[] = [];
 
   for (const tab of tabs) {
     if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
@@ -184,29 +184,18 @@ async function groupUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
 
     try {
       const hostname = new URL(tab.url).hostname;
-      if (!unmatchedByHost.has(hostname)) {
-        unmatchedByHost.set(hostname, []);
-      }
-      unmatchedByHost.get(hostname)!.push(tab.id);
+      unmatched.push({ id: tab.id, hostname });
     } catch {
       continue;
     }
   }
 
-  const sorted = [...unmatchedByHost.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0])
-  );
+  unmatched.sort((a, b) => a.hostname.localeCompare(b.hostname));
 
-  for (const [hostname, tabIds] of sorted) {
-    if (tabIds.length < 2) continue;
-
-    const groupId = await retryTabMutation(() =>
-      chrome.tabs.group({ tabIds })
+  for (const tab of unmatched) {
+    await retryTabMutation(() =>
+      chrome.tabs.move(tab.id, { index: -1 })
     );
-    await chrome.tabGroups.update(groupId, {
-      title: hostname.length > 20 ? hostname.slice(0, 18) + '\u2026' : hostname,
-      color: 'grey',
-    });
   }
 }
 
