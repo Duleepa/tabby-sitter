@@ -87,6 +87,13 @@ function parsePatterns(text: string): string[] {
 }
 
 async function init() {
+  // Set version from manifest
+  const manifest = chrome.runtime.getManifest();
+  const versionEl = $('version');
+  if (versionEl) {
+    versionEl.textContent = `v${manifest.version}`;
+  }
+
   await refresh();
 
   // Tab switching
