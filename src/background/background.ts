@@ -2,8 +2,6 @@ import { getRules, matchesRule } from '../storage/rules';
 
 console.log('[Background] Tabby Sitter started.');
 
-const tabGroupMap = new Map<number, number>(); // tabId -> groupId
-
 /** Retry a tab mutation once if Chrome transiently rejects it */
 async function retryTabMutation<T>(
   fn: () => Promise<T>
@@ -78,7 +76,6 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
       );
     }
 
-    tabGroupMap.set(freshTab.id!, groupId);
     console.log(
       `[Background] Tab ${freshTab.id} moved to group "${matchedRule.groupName}" in window ${freshTab.windowId}`
     );
@@ -88,7 +85,6 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   // No rule matched — ungroup only if currently in an auto-managed group
   if (currentGroupId !== -1 && isAutoManaged) {
     await retryTabMutation(() => chrome.tabs.ungroup(freshTab.id!));
-    tabGroupMap.delete(freshTab.id!);
     console.log(`[Background] Tab ${freshTab.id} ungrouped (no matching rule)`);
   }
 }
@@ -159,14 +155,12 @@ export async function organizeAllTabs(): Promise<void> {
         );
       }
 
-      tabGroupMap.set(freshTab.id!, groupId);
       continue;
     }
 
     // No rule matched — ungroup only auto-managed groups
     if (currentGroupId !== -1 && isAutoManaged) {
       await retryTabMutation(() => chrome.tabs.ungroup(freshTab.id!));
-      tabGroupMap.delete(freshTab.id!);
       console.log(`[Background] Tab ${freshTab.id} ungrouped (no matching rule)`);
     }
   }
