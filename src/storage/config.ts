@@ -48,11 +48,18 @@ export async function importConfigFile(file: File): Promise<GroupRule[]> {
   }
 
   const text = await file.text();
-  const parsed = JSON.parse(text) as ConfigFile;
+  let parsed: ConfigFile;
+  try {
+    parsed = JSON.parse(text) as ConfigFile;
+  } catch {
+    throw new Error('Config file is not valid JSON');
+  }
 
   if (!parsed.tabbySitter?.rules || !Array.isArray(parsed.tabbySitter.rules)) {
     throw new Error('Invalid config file: expected { tabbySitter: { rules: [...] } }');
   }
+
+  const VALID_MATCH_MODES = new Set(['contains', 'regex']);
 
   const rules = (parsed.tabbySitter.rules as any[]).map((r) => ({
     id: (r.id || generateId()) as string,
@@ -65,7 +72,7 @@ export async function importConfigFile(file: File): Promise<GroupRule[]> {
     groupName: (r.groupName || '') as string,
     description: r.description as string | undefined,
     color: r.color as chrome.tabGroups.ColorEnum | undefined,
-    matchMode: (r.matchMode || 'contains') as 'contains' | 'regex',
+    matchMode: VALID_MATCH_MODES.has(r.matchMode) ? r.matchMode : 'contains',
   }));
 
   if (rules.some((r) => r.patterns.length === 0)) {
