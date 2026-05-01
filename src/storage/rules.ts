@@ -1,3 +1,5 @@
+import { generateId } from '../utils/id';
+
 export type MatchMode = 'contains' | 'regex';
 
 export interface GroupRule {
@@ -11,10 +13,6 @@ export interface GroupRule {
 
 export interface RuleStorage {
   rules: GroupRule[];
-}
-
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2);
 }
 
 export async function getRules(): Promise<GroupRule[]> {
@@ -58,6 +56,8 @@ export function matchesRule(url: string, rule: GroupRule): boolean {
     return rule.patterns.some((p) => {
       if (!p) return false;
       if (rule.matchMode === 'regex') {
+        // Prevent extremely long patterns that could cause catastrophic backtracking
+        if (p.length > 5000) return false;
         try {
           return new RegExp(p, 'i').test(href);
         } catch {

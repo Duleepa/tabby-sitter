@@ -1,4 +1,5 @@
 import { getRules, saveRules, type GroupRule } from './rules';
+import { generateId } from '../utils/id';
 
 export interface ConfigFile {
   tabbySitter: {
@@ -40,6 +41,12 @@ export async function exportConfigFile(): Promise<void> {
  * Accepts new schema (patterns + matchMode) and old single-pattern schema.
  */
 export async function importConfigFile(file: File): Promise<GroupRule[]> {
+  // Reject unreasonably large files as a hardening measure
+  const MAX_SIZE = 1024 * 1024; // 1 MB
+  if (file.size > MAX_SIZE) {
+    throw new Error('Config file is too large (max 1 MB)');
+  }
+
   const text = await file.text();
   const parsed = JSON.parse(text) as ConfigFile;
 
@@ -48,7 +55,7 @@ export async function importConfigFile(file: File): Promise<GroupRule[]> {
   }
 
   const rules = (parsed.tabbySitter.rules as any[]).map((r) => ({
-    id: (r.id || crypto.randomUUID()) as string,
+    id: (r.id || generateId()) as string,
     patterns:
       Array.isArray(r.patterns) && r.patterns.length > 0
         ? (r.patterns as string[])
@@ -73,10 +80,6 @@ export async function importConfigFile(file: File): Promise<GroupRule[]> {
  * Create a fresh config file with a starter template.
  */
 export function createStarterConfig(): ConfigFile {
-  function generateId(): string {
-    return Date.now().toString(36) + Math.random().toString(36).slice(2);
-  }
-
   return {
     tabbySitter: {
       version: CONFIG_VERSION,
