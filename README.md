@@ -1,5 +1,7 @@
 # Tabby Sitter
 
+![Tabby Sitter - Tame your tabs](./promotion/tabbysitter-logo.png)
+
 > A Chrome extension that automatically groups your tabs by site rules.
 
 ## Overview
@@ -7,6 +9,9 @@
 **Tabby Sitter** watches your browser tabs and automatically moves them into organized Chrome tab groups based on URL patterns you define. No more manually dragging tabs around — just set your rules once and let Tabby Sitter herd your tabs into place.
 
 ## Features
+
+![Screenshot](./promotion/screenshot-1.png)
+![Screenshot](./promotion/screenshot-2.png)
 
 - **Rule-based auto-grouping**: Define URL patterns (e.g. `github.com`, `stackoverflow.com`) and assign them to named tab groups. Multiple patterns per rule supported.
 - **Match modes**: Choose between `contains` (substring match against the full URL) or `regex` (case-insensitive regular expression).
