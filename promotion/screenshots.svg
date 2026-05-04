@@ -8,7 +8,7 @@
    version="1.1"
    id="svg1"
    xml:space="preserve"
-   inkscape:export-filename="screenshot-2.png"
+   inkscape:export-filename="screenshot-1.png"
    inkscape:export-xdpi="96"
    inkscape:export-ydpi="96"
    inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
@@ -35,8 +35,13 @@
      inkscape:window-x="0"
      inkscape:window-y="30"
      inkscape:window-maximized="0"
-     inkscape:current-layer="g27" /><defs
+     inkscape:current-layer="layer1" /><defs
      id="defs1"><rect
+       x="130.58578"
+       y="522.34312"
+       width="1688.1752"
+       height="26.746485"
+       id="rect46" /><rect
        x="32.253117"
        y="190.37204"
        width="262.35156"
@@ -55,7 +60,7 @@
      inkscape:label="Layer 1"
      inkscape:groupmode="layer"
      id="layer1"
-     style="display:none"><image
+     style="display:inline"><image
        width="222.00296"
        height="163.1042"
        preserveAspectRatio="none"
@@ -72,7 +77,7 @@
          id="tspan1"
          style="stroke-width:1.42123"
          x="7.844039"
-         y="25.787905">Vertical tabs autoomatically</tspan><tspan
+         y="25.787905">Vertical tabs automatically</tspan><tspan
          sodipodi:role="line"
          style="stroke-width:1.42123"
          x="7.844039"
@@ -140,7 +145,8 @@
          id="tspan13">access, simple.</tspan></text></g><g
      inkscape:label="Layer 1 copy"
      inkscape:groupmode="layer"
-     id="g27"><image
+     id="g27"
+     style="display:none"><image
        width="230.05518"
        height="196.77472"
        preserveAspectRatio="none"
@@ -213,7 +219,11 @@
          style="stroke-width:1.42123"
          x="8.8992014"
          y="108.68841"
-         id="tspan46">whenever you Organize All Tabs!</tspan></text></g><g
+         id="tspan46">whenever you Organize All Tabs!</tspan></text><text
+       xml:space="preserve"
+       transform="scale(0.26458333)"
+       id="text46"
+       style="font-family:Chalkboard;-inkscape-font-specification:Chalkboard;writing-mode:lr-tb;direction:ltr;white-space:pre;shape-inside:url(#rect46);fill:#a69e9e;fill-opacity:1;stroke-width:2.51717" /></g><g
      inkscape:groupmode="layer"
      id="layer7"
      inkscape:label="Layer 3"
