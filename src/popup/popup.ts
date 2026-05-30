@@ -5,6 +5,7 @@ import {
   downloadStarterConfig,
   getSettings,
   saveSettings,
+  type DuplicateTabMode,
 } from '../storage/config';
 
 const $ = (id: string) => document.getElementById(id);
@@ -371,6 +372,35 @@ async function init() {
     const checked = ($('groupUnmatchedByDomain') as HTMLInputElement).checked;
     const current = await getSettings();
     current.groupUnmatchedByDomain = checked;
+    await saveSettings(current);
+  });
+
+  const modeSelect = $('duplicateTabMode') as HTMLSelectElement;
+  const domainsInput = $('duplicateTabDomains') as HTMLInputElement;
+  const confirmToggle = $('duplicateTabConfirm') as HTMLInputElement;
+  const domainsGroup = $('duplicateDomainsGroup') as HTMLElement;
+
+  modeSelect.value = settings.duplicateTabMode;
+  domainsInput.value = settings.duplicateTabDomains;
+  confirmToggle.checked = settings.duplicateTabConfirm;
+  domainsGroup.style.display = settings.duplicateTabMode === 'prevent-specific' ? '' : 'none';
+
+  modeSelect.addEventListener('change', async () => {
+    domainsGroup.style.display = modeSelect.value === 'prevent-specific' ? '' : 'none';
+    const current = await getSettings();
+    current.duplicateTabMode = modeSelect.value as DuplicateTabMode;
+    await saveSettings(current);
+  });
+
+  domainsInput.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.duplicateTabDomains = domainsInput.value.trim();
+    await saveSettings(current);
+  });
+
+  confirmToggle.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.duplicateTabConfirm = confirmToggle.checked;
     await saveSettings(current);
   });
 }
