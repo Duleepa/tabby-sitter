@@ -8,6 +8,12 @@
     "tabGroups",
     "storage"
   ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/popup/confirm.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "action": {
     "default_popup": "src/popup/popup.html",
     "default_icon": {
