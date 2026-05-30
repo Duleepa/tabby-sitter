@@ -95,6 +95,31 @@ or regex patterns if using Regex mode"></textarea>
 
       <article class="card">
         <div class="card-header-row">
+          <h2>Duplicate Tabs</h2>
+        </div>
+        <p class="hint">
+          Prevent opening the same URL in multiple tabs.
+        </p>
+        <label for="duplicateTabMode">Mode</label>
+        <select id="duplicateTabMode">
+          <option value="allow">Allow duplicates (off)</option>
+          <option value="prevent-all">Prevent all</option>
+          <option value="prevent-specific">Prevent specific domains</option>
+        </select>
+
+        <div id="duplicateDomainsGroup" style="display: none">
+          <label for="duplicateTabDomains">Domains (comma-separated)</label>
+          <input type="text" id="duplicateTabDomains" placeholder="github.com, docs.google.com" />
+        </div>
+
+        <div class="card-header-row">
+          <label class="toggle-label" for="duplicateTabConfirm">Confirmation dialog</label>
+          <input type="checkbox" class="rule-toggle" id="duplicateTabConfirm" />
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-header-row">
           <h2>Domain Sorting</h2>
           <label class="toggle-label">
             <input type="checkbox" class="rule-toggle" id="groupUnmatchedByDomain" />

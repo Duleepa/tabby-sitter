@@ -162,12 +162,20 @@ export function downloadStarterConfig(): void {
   URL.revokeObjectURL(url);
 }
 
+export type DuplicateTabMode = 'allow' | 'prevent-all' | 'prevent-specific';
+
 export interface ExtensionSettings {
   groupUnmatchedByDomain: boolean;
+  duplicateTabMode: DuplicateTabMode;
+  duplicateTabDomains: string;
+  duplicateTabConfirm: boolean;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
   groupUnmatchedByDomain: false,
+  duplicateTabMode: 'allow',
+  duplicateTabDomains: '',
+  duplicateTabConfirm: true,
 };
 
 export async function getSettings(): Promise<ExtensionSettings> {

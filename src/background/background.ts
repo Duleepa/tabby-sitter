@@ -3,7 +3,79 @@ import { getSettings } from '../storage/config';
 
 console.log('[Background] Tabby Sitter started.');
 
-/** Retry a tab mutation once if Chrome transiently rejects it */
+function parseDomains(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d.length > 0);
+}
+
+function hostnameMatchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith('.' + domain);
+}
+
+const DUPLICATE_SKIP_PREFIXES = ['chrome://', 'about:blank', 'about:newtab', 'edge://', 'brave://'];
+const pendingPopups = new Set<number>();
+
+async function switchToExistingAndClose(existingTabId: number, newTabId: number): Promise<void> {
+  await chrome.tabs.update(existingTabId, { active: true });
+  await retryTabMutation(async () => {
+    await chrome.tabs.remove(newTabId);
+  });
+}
+
+async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
+  if (!tab.id || !tab.url || !tab.windowId) return false;
+
+  if (DUPLICATE_SKIP_PREFIXES.some((p) => tab.url!.startsWith(p))) return false;
+
+  const settings = await getSettings();
+
+  if (settings.duplicateTabMode === 'allow') return false;
+
+  const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
+  const existingTab = allTabs.find((t) => t.id !== tab.id && t.url === tab.url);
+  if (!existingTab || !existingTab.id) return false;
+
+  if (settings.duplicateTabMode === 'prevent-specific') {
+    try {
+      const hostname = new URL(tab.url).hostname.toLowerCase();
+      const domains = parseDomains(settings.duplicateTabDomains);
+      if (!domains.some((d) => hostnameMatchesDomain(hostname, d))) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  }
+
+  const newTabId = tab.id;
+  const existingTabId = existingTab.id;
+
+  if (settings.duplicateTabConfirm) {
+    if (pendingPopups.has(newTabId)) return true;
+    pendingPopups.add(newTabId);
+    
+    const confirmUrl =
+      `src/popup/confirm.html?` +
+      `newTabId=${newTabId}&existingTabId=${existingTabId}&url=${encodeURIComponent(tab.url)}`;
+
+    await chrome.windows.create({
+      url: confirmUrl,
+      type: 'popup',
+      width: 380,
+      height: 200,
+      focused: true,
+    });
+    return true;
+  }
+
+  await switchToExistingAndClose(existingTabId, newTabId);
+  console.log(`[Background] Switched to existing tab ${existingTabId}, closed duplicate ${newTabId}`);
+  return true;
+}
+
+
 async function retryTabMutation<T>(
   fn: () => Promise<T>
 ): Promise<T> {
@@ -19,7 +91,6 @@ async function retryTabMutation<T>(
   }
 }
 
-/** Returns an existing group ID for the name in a specific window, or -1 to signal "create new with next tab" */
 async function findOrReserveGroupInWindow(
   groupName: string,
   windowId: number
@@ -31,7 +102,6 @@ async function findOrReserveGroupInWindow(
 async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   if (!tab.id || !tab.windowId) return;
 
-  // Refresh tab state to avoid stale groupId / url
   let freshTab: chrome.tabs.Tab;
   try {
     freshTab = await chrome.tabs.get(tab.id);
@@ -46,7 +116,6 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   const matchedRule = rules.find((r) => matchesRule(freshTab.url!, r)) ?? null;
   const currentGroupId = freshTab.groupId ?? -1;
 
-  // Resolve current group title (if any)
   let currentGroupTitle: string | undefined;
   if (currentGroupId !== -1) {
     try {
@@ -58,7 +127,6 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   const isAutoManaged = !!currentGroupTitle && ruleGroupNames.has(currentGroupTitle);
 
   if (matchedRule) {
-    // Already correct -> noop
     if (currentGroupTitle === matchedRule.groupName) return;
 
     let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, freshTab.windowId);
@@ -83,14 +151,12 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
     return;
   }
 
-  // No rule matched — ungroup only if currently in an auto-managed group
   if (currentGroupId !== -1 && isAutoManaged) {
     await retryTabMutation(() => chrome.tabs.ungroup(freshTab.id!));
     console.log(`[Background] Tab ${freshTab.id} ungrouped (no matching rule)`);
   }
 }
 
-/** Process all open tabs in the current window against current rules */
 export async function organizeAllTabs(): Promise<void> {
   const tabs = await chrome.tabs.query({ currentWindow: true });
   if (tabs.length === 0) return;
@@ -99,7 +165,6 @@ export async function organizeAllTabs(): Promise<void> {
   const rules = getActiveRules(await getRules());
   const ruleGroupNames = new Set(rules.map((r) => r.groupName));
 
-  // Pre-fetch all groups in this window
   const groups = await chrome.tabGroups.query({ windowId });
   const groupNameToId = new Map<string, number>();
   const groupIdToTitle = new Map<number, string>();
@@ -110,7 +175,6 @@ export async function organizeAllTabs(): Promise<void> {
     }
   }
 
-  // Categorize tabs by action
   const tabsToGroup = new Map<string, number[]>();
   const tabsToUngroup: number[] = [];
 
@@ -133,7 +197,6 @@ export async function organizeAllTabs(): Promise<void> {
     }
   }
 
-  // Execute batched group operations
   for (const [groupName, tabIds] of tabsToGroup) {
     if (tabIds.length === 0) continue;
 
@@ -162,7 +225,6 @@ export async function organizeAllTabs(): Promise<void> {
     }
   }
 
-  // Batch ungroup
   if (tabsToUngroup.length > 0) {
     await retryTabMutation(() => chrome.tabs.ungroup(tabsToUngroup));
   }
@@ -201,20 +263,29 @@ async function sortUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
 
 chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   if (changeInfo.url && tab.id) {
-    processTab(tab).catch((err) =>
-      console.error('[Background] processTab failed on onUpdated', err)
+    handleDuplicateTab(tab).then((handled) => {
+      if (handled) return;
+      processTab(tab).catch((err) =>
+        console.error('[Background] processTab failed on onUpdated', err)
+      );
+    }).catch((err) =>
+      console.error('[Background] handleDuplicateTab failed on onUpdated', err)
     );
   }
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
-  if (tab.id && tab.url) {
+  if (!tab.id || !tab.url) return;
+  handleDuplicateTab(tab).then((handled) => {
+    if (handled) return;
     setTimeout(() => {
       processTab(tab).catch((err) =>
         console.error('[Background] processTab failed on onCreated', err)
       );
     }, 100);
-  }
+  }).catch((err) =>
+    console.error('[Background] handleDuplicateTab failed', err)
+  );
 });
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
@@ -226,6 +297,41 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
         sendResponse({ success: false, error: String(err) });
       });
     return true;
+  }
+  if (request.action === 'switchToExisting') {
+    const popupWindowId = request.popupWindowId;
+    
+    const closePopup = popupWindowId 
+      ? chrome.windows.remove(popupWindowId).catch((err) => {
+          console.warn('[Background] Failed to close popup window:', err);
+        })
+      : Promise.resolve();
+    
+    closePopup
+      .then(() => switchToExistingAndClose(request.existingTabId, request.newTabId))
+      .catch((err) => {
+        console.error('[Background] switchToExisting failed', err);
+      });
+    
+    return true;
+  }
+  if (request.action === 'dismiss') {
+    const popupWindowId = request.popupWindowId;
+    if (popupWindowId) {
+      chrome.windows.remove(popupWindowId).catch((err) => {
+        console.warn('[Background] Failed to close popup window on dismiss:', err);
+      });
+    }
+    return false;
+  }
+  if (request.action === 'dismiss') {
+    const popupWindowId = request.popupWindowId;
+    if (popupWindowId) {
+      chrome.windows.remove(popupWindowId).catch((err) => {
+        console.warn('[Background] Failed to close popup window on dismiss:', err);
+      });
+    }
+    return false;
   }
   return false;
 });
