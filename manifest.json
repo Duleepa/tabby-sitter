@@ -1,17 +1,22 @@
 {
   "manifest_version": 3,
   "name": "Tabby Sitter - Automated Tab Manager ",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "Automatically groups, manages, and organizes tabs based on simple and complex rules.",
   "permissions": [
     "tabs",
     "tabGroups",
-    "storage"
+    "storage",
+    "scripting"
   ],
-  "web_accessible_resources": [
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "content_scripts": [
     {
-      "resources": ["src/popup/confirm.html"],
-      "matches": ["<all_urls>"]
+      "matches": ["<all_urls>"],
+      "js": ["src/content/duplicate-confirm.ts"],
+      "run_at": "document_idle"
     }
   ],
   "action": {

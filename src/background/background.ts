@@ -15,7 +15,36 @@ function hostnameMatchesDomain(hostname: string, domain: string): boolean {
 }
 
 const DUPLICATE_SKIP_PREFIXES = ['chrome://', 'about:blank', 'about:newtab', 'edge://', 'brave://'];
-const pendingPopups = new Set<number>();
+
+function waitForTabReady(tabId: number, timeoutMs = 8000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      chrome.tabs.onUpdated.removeListener(listener);
+      reject(new Error('Tab load timeout'));
+    }, timeoutMs);
+
+    const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
+      if (id === tabId && info.status === 'complete') {
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(listener);
+        setTimeout(resolve, 150);
+      }
+    };
+    chrome.tabs.onUpdated.addListener(listener);
+
+    chrome.tabs.get(tabId).then((t) => {
+      if (t.status === 'complete') {
+        clearTimeout(timer);
+        chrome.tabs.onUpdated.removeListener(listener);
+        setTimeout(resolve, 150);
+      }
+    }).catch(() => {
+      clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(listener);
+      reject(new Error('Tab not found'));
+    });
+  });
+}
 
 async function switchToExistingAndClose(existingTabId: number, newTabId: number): Promise<void> {
   await chrome.tabs.update(existingTabId, { active: true });
@@ -53,20 +82,16 @@ async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
   const existingTabId = existingTab.id;
 
   if (settings.duplicateTabConfirm) {
-    if (pendingPopups.has(newTabId)) return true;
-    pendingPopups.add(newTabId);
-    
-    const confirmUrl =
-      `src/popup/confirm.html?` +
-      `newTabId=${newTabId}&existingTabId=${existingTabId}&url=${encodeURIComponent(tab.url)}`;
-
-    await chrome.windows.create({
-      url: confirmUrl,
-      type: 'popup',
-      width: 380,
-      height: 200,
-      focused: true,
-    });
+    try {
+      await waitForTabReady(newTabId);
+      await chrome.tabs.sendMessage(newTabId, {
+        action: 'showDuplicateConfirm',
+        data: { newTabId, existingTabId, url: tab.url },
+      });
+    } catch (err) {
+      console.warn('[Background] Failed to show confirmation bar, auto-closing:', err);
+      await switchToExistingAndClose(existingTabId, newTabId);
+    }
     return true;
   }
 
@@ -299,47 +324,13 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     return true;
   }
   if (request.action === 'switchToExisting') {
-    const popupWindowId = request.popupWindowId;
-    
-    const closePopup = popupWindowId 
-      ? chrome.windows.remove(popupWindowId).catch((err) => {
-          console.warn('[Background] Failed to close popup window:', err);
-        })
-      : Promise.resolve();
-    
-    closePopup
-      .then(() => switchToExistingAndClose(request.existingTabId, request.newTabId))
+    switchToExistingAndClose(request.existingTabId, request.newTabId)
       .catch((err) => {
         console.error('[Background] switchToExisting failed', err);
       });
-    
     return true;
   }
-  if (request.action === 'dismiss') {
-    const popupWindowId = request.popupWindowId;
-    if (popupWindowId) {
-      chrome.windows.remove(popupWindowId).catch((err) => {
-        console.warn('[Background] Failed to close popup window on dismiss:', err);
-      });
-    }
-    return false;
-  }
-  if (request.action === 'dismiss') {
-    const popupWindowId = request.popupWindowId;
-    if (popupWindowId) {
-      chrome.windows.remove(popupWindowId).catch((err) => {
-        console.warn('[Background] Failed to close popup window on dismiss:', err);
-      });
-    }
-    return false;
-  }
   return false;
-});
-
-chrome.commands.onCommand.addListener((command) => {
-  if (command === 'organize-tabs') {
-    organizeAllTabs();
-  }
 });
 
 chrome.commands.onCommand.addListener((command) => {
