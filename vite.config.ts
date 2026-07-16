@@ -7,10 +7,5 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
-    rollupOptions: {
-      input: {
-        'src/popup/confirm.html': 'src/popup/confirm.html',
-      },
-    },
   },
 });
