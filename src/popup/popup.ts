@@ -7,6 +7,7 @@ import {
   saveSettings,
   type DuplicateTabMode,
 } from '../storage/config';
+import type { OrganizeResponse, RuntimeMessage } from '../storage/messages';
 
 const $ = (id: string) => document.getElementById(id);
 const $$ = (sel: string) => document.querySelector(sel);
@@ -34,11 +35,13 @@ function escapeHtml(s: string): string {
 }
 
 function renderPatterns(patterns: string[], mode: MatchMode): string {
-  const joined = escapeHtml(patterns.join(', '));
-  if (joined.length > 50) {
-    return joined.slice(0, 50) + '…';
+  const raw = patterns.join(', ');
+  // Truncate the raw text *before* escaping so we never slice through an HTML
+  // entity (e.g. a `&amp;`) and emit broken markup.
+  if (raw.length > 50) {
+    return escapeHtml(raw.slice(0, 50)) + '…';
   }
-  return `${joined} <span class="rule-mode">(${mode})</span>`;
+  return `${escapeHtml(raw)} <span class="rule-mode">(${mode})</span>`;
 }
 
 function renderRules(rules: GroupRule[]) {
@@ -56,7 +59,7 @@ function renderRules(rules: GroupRule[]) {
     <div class="rule-item${r.enabled === false ? ' rule-disabled' : ''}" data-id="${r.id}">
       <div class="rule-info">
         <div class="rule-header">
-          <span class="rule-pill" style="background-color: var(--color-${r.color || 'blue'}); color: #fff;">${escapeHtml(r.groupName)}</span>
+          <span class="rule-pill" style="background-color: var(--color-${r.color ?? 'blue'}); color: #fff;">${escapeHtml(r.groupName)}</span>
           ${r.description ? '<span class="rule-desc">' + escapeHtml(r.description) + '</span>' : ''}
         </div>
         <div class="rule-meta">
@@ -108,7 +111,7 @@ function renderEditForm(rule: GroupRule): string {
       <select class="edit-color">${colorOptions}</select>
 
       <label class="edit-label">Description (optional)</label>
-      <input class="edit-description" type="text" value="${escapeHtml(rule.description || '')}" />
+      <input class="edit-description" type="text" value="${escapeHtml(rule.description ?? '')}" />
 
       <div class="edit-actions">
         <button class="small" data-save="${rule.id}">Save</button>
@@ -124,6 +127,21 @@ function parsePatterns(text: string | undefined): string[] {
     .split(/[\n,;]+/)
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
+}
+
+/** Validate the shared rule inputs. Returns an error message, or null if valid. */
+function validateRuleInput(patterns: string[], groupName: string, matchMode: MatchMode): string | null {
+  if (patterns.length === 0 || !groupName) {
+    return 'At least one pattern and a group name are required';
+  }
+  if (matchMode === 'regex') {
+    const invalid = patterns.find((p) => {
+      try { new RegExp(p); return false; }
+      catch { return true; }
+    });
+    if (invalid !== undefined) return `Invalid regex: "${invalid}"`;
+  }
+  return null;
 }
 
 async function refresh() {
@@ -144,7 +162,7 @@ async function init() {
   // Tab switching
   document.querySelectorAll('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
-      const tab = (btn as HTMLElement).dataset.tab || 'rules';
+      const tab = (btn as HTMLElement).dataset.tab ?? 'rules';
       setActiveTab(tab);
     });
   });
@@ -172,8 +190,8 @@ async function init() {
     }
 
     // Toggle checkbox
-    const toggle = target.closest('.rule-toggle') as HTMLInputElement | null;
-    if (toggle) {
+    const toggle = target.closest('.rule-toggle');
+    if (toggle instanceof HTMLInputElement) {
       const id = toggle.dataset.toggle;
       if (!id) return;
       const enabled = await toggleRule(id);
@@ -221,20 +239,10 @@ async function init() {
 
       const patterns = parsePatterns(patternsRaw);
 
-      if (patterns.length === 0 || !groupName) {
-        showStatus('At least one pattern and a group name are required');
+      const error = validateRuleInput(patterns, groupName, matchMode);
+      if (error) {
+        showStatus(error);
         return;
-      }
-
-      if (matchMode === 'regex') {
-        const invalid = patterns.find((p) => {
-          try { new RegExp(p); return false; }
-          catch { return true; }
-        });
-        if (invalid !== undefined) {
-          showStatus(`Invalid regex: "${invalid}"`);
-          return;
-        }
       }
 
       const result = await updateRule(id, { patterns, groupName, color, matchMode, description: description || undefined });
@@ -265,20 +273,10 @@ async function init() {
 
     const patterns = parsePatterns(patternsRaw);
 
-    if (patterns.length === 0 || !groupName) {
-      showStatus('At least one pattern and a group name are required');
+    const error = validateRuleInput(patterns, groupName, matchMode);
+    if (error) {
+      showStatus(error);
       return;
-    }
-
-    if (matchMode === 'regex') {
-      const invalid = patterns.find((p) => {
-        try { new RegExp(p); return false; }
-        catch { return true; }
-      });
-      if (invalid !== undefined) {
-        showStatus(`Invalid regex: "${invalid}"`);
-        return;
-      }
     }
 
     const result = await addRule({ patterns, groupName, color, matchMode, description: description || undefined });
@@ -308,7 +306,9 @@ async function init() {
     btn.disabled = true;
 
     try {
-      const response = await chrome.runtime.sendMessage({ action: 'organizeAllTabs' });
+      const response = await chrome.runtime.sendMessage<RuntimeMessage, OrganizeResponse>({
+        action: 'organizeAllTabs',
+      });
       if (response?.success) {
         btn.textContent = '✅ Tabs Organized';
       } else {
@@ -405,4 +405,4 @@ async function init() {
   });
 }
 
-init();
+void init();

@@ -1,4 +1,4 @@
-import { getRules, saveRules, type GroupRule } from './rules';
+import { getRules, saveRules, normalizeRawRule, type GroupRule, type RawRule } from './rules';
 import { generateId } from '../utils/id';
 
 export interface ConfigFile {
@@ -59,21 +59,10 @@ export async function importConfigFile(file: File, mode: 'replace' | 'merge' = '
     throw new Error('Invalid config file: expected { tabbySitter: { rules: [...] } }');
   }
 
-  const VALID_MATCH_MODES = new Set(['contains', 'regex']);
-
-  const rules = (parsed.tabbySitter.rules as any[]).map((r) => ({
-    id: (r.id || generateId()) as string,
-    patterns:
-      Array.isArray(r.patterns) && r.patterns.length > 0
-        ? (r.patterns as string[])
-        : r.pattern
-          ? [r.pattern as string]
-          : [],
-    groupName: (r.groupName || '') as string,
-    description: r.description as string | undefined,
-    color: r.color as chrome.tabGroups.ColorEnum | undefined,
-    matchMode: VALID_MATCH_MODES.has(String(r.matchMode)) ? (r.matchMode as 'contains' | 'regex') : 'contains',
-  }));
+  const rules: GroupRule[] = (parsed.tabbySitter.rules as RawRule[]).map((raw) => {
+    const rule = normalizeRawRule(raw);
+    return { ...rule, id: rule.id || generateId() };
+  });
 
   if (rules.some((r) => r.patterns.length === 0)) {
     throw new Error('Invalid rule: patterns cannot be empty');
