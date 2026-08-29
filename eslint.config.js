@@ -38,4 +38,10 @@ export default tseslint.config(
       '@typescript-eslint/no-deprecated': 'off',
     },
   },
+  {
+    // Root build/config files live outside the src tsconfig project, so run
+    // them without type-aware linting to avoid "not found by project" errors.
+    files: ['*.config.{js,ts,mjs,cjs}'],
+    extends: [tseslint.configs.disableTypeChecked],
+  },
 );

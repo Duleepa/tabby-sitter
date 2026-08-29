@@ -1,5 +1,6 @@
 import { getRules, getActiveRules, matchesRule } from '../storage/rules';
 import { getSettings } from '../storage/config';
+import type { RuntimeMessage, OrganizeResponse } from '../storage/messages';
 
 console.log('[Background] Tabby Sitter started.');
 
@@ -54,21 +55,22 @@ async function switchToExistingAndClose(existingTabId: number, newTabId: number)
 }
 
 async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
-  if (!tab.id || !tab.url || !tab.windowId) return false;
+  const { id: newTabId, url, windowId } = tab;
+  if (!newTabId || !url || !windowId) return false;
 
-  if (DUPLICATE_SKIP_PREFIXES.some((p) => tab.url!.startsWith(p))) return false;
+  if (DUPLICATE_SKIP_PREFIXES.some((p) => url.startsWith(p))) return false;
 
   const settings = await getSettings();
 
   if (settings.duplicateTabMode === 'allow') return false;
 
-  const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
-  const existingTab = allTabs.find((t) => t.id !== tab.id && t.url === tab.url);
-  if (!existingTab || !existingTab.id) return false;
+  const allTabs = await chrome.tabs.query({ windowId });
+  const existingTab = allTabs.find((t) => t.id !== newTabId && t.url === url);
+  if (!existingTab?.id) return false;
 
   if (settings.duplicateTabMode === 'prevent-specific') {
     try {
-      const hostname = new URL(tab.url).hostname.toLowerCase();
+      const hostname = new URL(url).hostname.toLowerCase();
       const domains = parseDomains(settings.duplicateTabDomains);
       if (!domains.some((d) => hostnameMatchesDomain(hostname, d))) {
         return false;
@@ -78,7 +80,6 @@ async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
     }
   }
 
-  const newTabId = tab.id;
   const existingTabId = existingTab.id;
 
   if (settings.duplicateTabConfirm) {
@@ -86,8 +87,8 @@ async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
       await waitForTabReady(newTabId);
       await chrome.tabs.sendMessage(newTabId, {
         action: 'showDuplicateConfirm',
-        data: { newTabId, existingTabId, url: tab.url },
-      });
+        data: { newTabId, existingTabId, url },
+      } satisfies RuntimeMessage);
     } catch (err) {
       console.warn('[Background] Failed to show confirmation bar, auto-closing:', err);
       await switchToExistingAndClose(existingTabId, newTabId);
@@ -133,12 +134,13 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   } catch {
     return;
   }
-  if (!freshTab.url) return;
+  const { id: tabId, url, windowId } = freshTab;
+  if (!tabId || !url || !windowId) return;
 
   const rules = getActiveRules(await getRules());
   const ruleGroupNames = new Set(rules.map((r) => r.groupName));
 
-  const matchedRule = rules.find((r) => matchesRule(freshTab.url!, r)) ?? null;
+  const matchedRule = rules.find((r) => matchesRule(url, r)) ?? null;
   const currentGroupId = freshTab.groupId ?? -1;
 
   let currentGroupTitle: string | undefined;
@@ -154,31 +156,31 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   if (matchedRule) {
     if (currentGroupTitle === matchedRule.groupName) return;
 
-    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, freshTab.windowId);
+    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, windowId);
     if (groupId === -1) {
       groupId = await retryTabMutation(() =>
-        chrome.tabs.group({ tabIds: freshTab.id! })
+        chrome.tabs.group({ tabIds: tabId })
       );
       await chrome.tabGroups.update(groupId, {
         title: matchedRule.groupName,
-        color: matchedRule.color || 'blue',
+        color: matchedRule.color ?? 'blue',
       });
     } else {
-      await retryTabMutation(() => chrome.tabs.move(freshTab.id!, { index: -1 }));
+      await retryTabMutation(() => chrome.tabs.move(tabId, { index: -1 }));
       await retryTabMutation(() =>
-        chrome.tabs.group({ tabIds: freshTab.id!, groupId })
+        chrome.tabs.group({ tabIds: tabId, groupId })
       );
     }
 
     console.log(
-      `[Background] Tab ${freshTab.id} moved to group "${matchedRule.groupName}" in window ${freshTab.windowId}`
+      `[Background] Tab ${tabId} moved to group "${matchedRule.groupName}" in window ${windowId}`
     );
     return;
   }
 
   if (currentGroupId !== -1 && isAutoManaged) {
-    await retryTabMutation(() => chrome.tabs.ungroup(freshTab.id!));
-    console.log(`[Background] Tab ${freshTab.id} ungrouped (no matching rule)`);
+    await retryTabMutation(() => chrome.tabs.ungroup(tabId));
+    console.log(`[Background] Tab ${tabId} ungrouped (no matching rule)`);
   }
 }
 
@@ -204,21 +206,21 @@ export async function organizeAllTabs(): Promise<void> {
   const tabsToUngroup: number[] = [];
 
   for (const tab of tabs) {
-    if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+    const { id: tabId, url } = tab;
+    if (!tabId || !url || url.startsWith('chrome://')) continue;
 
-    const matchedRule = rules.find((r) => matchesRule(tab.url!, r)) ?? null;
+    const matchedRule = rules.find((r) => matchesRule(url, r)) ?? null;
     const currentGroupId = tab.groupId ?? -1;
-    const currentGroupTitle = groupIdToTitle.get(currentGroupId) || '';
+    const currentGroupTitle = groupIdToTitle.get(currentGroupId) ?? '';
     const isAutoManaged = !!currentGroupTitle && ruleGroupNames.has(currentGroupTitle);
 
     if (matchedRule) {
       if (currentGroupTitle === matchedRule.groupName) continue;
-      if (!tabsToGroup.has(matchedRule.groupName)) {
-        tabsToGroup.set(matchedRule.groupName, []);
-      }
-      tabsToGroup.get(matchedRule.groupName)!.push(tab.id);
+      const bucket = tabsToGroup.get(matchedRule.groupName) ?? [];
+      bucket.push(tabId);
+      tabsToGroup.set(matchedRule.groupName, bucket);
     } else if (currentGroupId !== -1 && isAutoManaged) {
-      tabsToUngroup.push(tab.id);
+      tabsToUngroup.push(tabId);
     }
   }
 
@@ -228,13 +230,14 @@ export async function organizeAllTabs(): Promise<void> {
     let groupId = groupNameToId.get(groupName) ?? -1;
 
     if (groupId === -1) {
-      const rule = rules.find((r) => r.groupName === groupName)!;
+      const rule = rules.find((r) => r.groupName === groupName);
+      if (!rule) continue;
       groupId = await retryTabMutation(() =>
         chrome.tabs.group({ tabIds: [tabIds[0]] })
       );
       await chrome.tabGroups.update(groupId, {
         title: rule.groupName,
-        color: rule.color || 'blue',
+        color: rule.color ?? 'blue',
       });
       groupNameToId.set(groupName, groupId);
 
@@ -313,28 +316,27 @@ chrome.tabs.onCreated.addListener((tab) => {
   );
 });
 
-chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
-  if (request.action === 'organizeAllTabs') {
+chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
+  if (message.action === 'organizeAllTabs') {
     organizeAllTabs()
-      .then(() => sendResponse({ success: true }))
-      .catch((err) => {
+      .then(() => sendResponse({ success: true } satisfies OrganizeResponse))
+      .catch((err: unknown) => {
         console.error('[Background] organizeAllTabs failed', err);
-        sendResponse({ success: false, error: String(err) });
+        sendResponse({ success: false, error: String(err) } satisfies OrganizeResponse);
       });
-    return true;
+    return true; // response sent asynchronously
   }
-  if (request.action === 'switchToExisting') {
-    switchToExistingAndClose(request.existingTabId, request.newTabId)
-      .catch((err) => {
-        console.error('[Background] switchToExisting failed', err);
-      });
-    return true;
+  if (message.action === 'switchToExisting') {
+    switchToExistingAndClose(message.existingTabId, message.newTabId).catch((err: unknown) => {
+      console.error('[Background] switchToExisting failed', err);
+    });
+    return false; // no response expected
   }
   return false;
 });
 
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'organize-tabs') {
-    organizeAllTabs();
+    void organizeAllTabs();
   }
 });

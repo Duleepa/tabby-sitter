@@ -16,21 +16,49 @@ export interface RuleStorage {
   rules: GroupRule[];
 }
 
+/** Shape of a rule as it may appear in storage or an imported config file
+ *  before normalization — every field optional, plus the legacy single
+ *  `pattern` string. */
+export interface RawRule {
+  id?: string;
+  patterns?: string[];
+  pattern?: string;
+  groupName?: string;
+  description?: string;
+  color?: chrome.tabGroups.ColorEnum;
+  matchMode?: string;
+  enabled?: boolean;
+}
+
 let cachedRules: GroupRule[] | null = null;
 
 function invalidateCache(): void {
   cachedRules = null;
 }
 
-function parseRawRules(raw: any[]): GroupRule[] {
-  return raw.map((r) => ({
-    id: r.id || '',
-    patterns: r.patterns || (r.pattern ? [r.pattern] : []),
-    groupName: r.groupName || '',
-    description: r.description,
-    color: r.color,
-    matchMode: r.matchMode || 'contains',
-  }));
+/** Coerce a loosely-typed raw rule into a well-formed GroupRule, shimming the
+ *  legacy single-`pattern` schema and validating the match mode. */
+export function normalizeRawRule(raw: RawRule): GroupRule {
+  const patterns =
+    Array.isArray(raw.patterns) && raw.patterns.length > 0
+      ? raw.patterns
+      : raw.pattern
+        ? [raw.pattern]
+        : [];
+  const matchMode: MatchMode = raw.matchMode === 'regex' ? 'regex' : 'contains';
+  return {
+    id: raw.id ?? '',
+    patterns,
+    groupName: raw.groupName ?? '',
+    description: raw.description,
+    color: raw.color,
+    matchMode,
+    enabled: raw.enabled,
+  };
+}
+
+function parseRawRules(raw: RawRule[]): GroupRule[] {
+  return raw.map(normalizeRawRule);
 }
 
 function rulesAreDuplicate(a: GroupRule, b: Omit<GroupRule, 'id'>): boolean {
@@ -44,8 +72,8 @@ function rulesAreDuplicate(a: GroupRule, b: Omit<GroupRule, 'id'>): boolean {
 export async function getRules(): Promise<GroupRule[]> {
   if (cachedRules !== null) return cachedRules;
 
-  const result = (await chrome.storage.local.get('rules')) as { rules?: any[] };
-  const raw = result.rules || [];
+  const result = (await chrome.storage.local.get('rules')) as { rules?: RawRule[] };
+  const raw = result.rules ?? [];
   cachedRules = parseRawRules(raw);
   return cachedRules;
 }

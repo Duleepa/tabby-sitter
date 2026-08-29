@@ -1,8 +1,4 @@
-interface DuplicateConfirmData {
-  newTabId: number;
-  existingTabId: number;
-  url: string;
-}
+import type { DuplicateConfirmData, RuntimeMessage } from '../storage/messages';
 
 let barHost: HTMLDivElement | null = null;
 let barEl: HTMLDivElement | null = null;
@@ -144,21 +140,41 @@ function createBar(data: DuplicateConfirmData): void {
     const parsed = new URL(data.url);
     displayUrl = parsed.hostname + parsed.pathname;
   } catch {
+    // Fall back to the raw string if the URL cannot be parsed.
   }
 
-  bar.innerHTML = `
-    <div class="confirm-bar-content">
-      <div class="banner">
-        <span class="banner-icon">⚠️</span>
-        <span class="banner-text">Duplicate Tab</span>
-      </div>
-      <div class="url-display" title="${data.url}">${displayUrl}</div>
-      <div class="actions">
-        <button class="btn-switch">Switch to existing</button>
-        <button class="btn-keep">Keep this tab</button>
-      </div>
-    </div>
-  `;
+  // Build the bar as DOM nodes rather than an HTML string so the page URL
+  // (attacker-controllable) can never break out of markup / inject content.
+  const content = document.createElement('div');
+  content.className = 'confirm-bar-content';
+
+  const banner = document.createElement('div');
+  banner.className = 'banner';
+  const bannerIcon = document.createElement('span');
+  bannerIcon.className = 'banner-icon';
+  bannerIcon.textContent = '⚠️';
+  const bannerText = document.createElement('span');
+  bannerText.className = 'banner-text';
+  bannerText.textContent = 'Duplicate Tab';
+  banner.append(bannerIcon, bannerText);
+
+  const urlDisplay = document.createElement('div');
+  urlDisplay.className = 'url-display';
+  urlDisplay.title = data.url;
+  urlDisplay.textContent = displayUrl;
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const switchBtn = document.createElement('button');
+  switchBtn.className = 'btn-switch';
+  switchBtn.textContent = 'Switch to existing';
+  const keepBtn = document.createElement('button');
+  keepBtn.className = 'btn-keep';
+  keepBtn.textContent = 'Keep this tab';
+  actions.append(switchBtn, keepBtn);
+
+  content.append(banner, urlDisplay, actions);
+  bar.appendChild(content);
 
   shadow.appendChild(bar);
   barEl = bar;
@@ -168,22 +184,18 @@ function createBar(data: DuplicateConfirmData): void {
     bar.classList.add('visible');
   });
 
-  const switchBtn = shadow.querySelector('.btn-switch');
-  const keepBtn = shadow.querySelector('.btn-keep');
-
-  switchBtn?.addEventListener('click', () => {
-    chrome.runtime.sendMessage({
+  switchBtn.addEventListener('click', () => {
+    void chrome.runtime.sendMessage({
       action: 'switchToExisting',
       existingTabId: data.existingTabId,
       newTabId: data.newTabId,
-    });
+    } satisfies RuntimeMessage);
     destroyBar();
   });
 
-  keepBtn?.addEventListener('click', () => {
-    chrome.runtime.sendMessage({
-      action: 'dismiss',
-    });
+  // "Keep this tab" simply dismisses the bar; the tab already exists so the
+  // background worker needs to do nothing.
+  keepBtn.addEventListener('click', () => {
     destroyBar();
   });
 
@@ -220,9 +232,9 @@ function destroyBar(): void {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
   if (message.action === 'showDuplicateConfirm') {
-    createBar(message.data as DuplicateConfirmData);
+    createBar(message.data);
     sendResponse({ success: true });
   }
   return false;
