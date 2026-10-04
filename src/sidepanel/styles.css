@@ -813,3 +813,8 @@ footer .sep {
   border-color: var(--text);
   outline: none;
 }
+
+.row .ind.manual {
+  opacity: 0.55;
+  font-size: 0.65rem;
+}

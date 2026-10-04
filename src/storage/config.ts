@@ -1,4 +1,4 @@
-import { getRules, saveRules, type GroupRule, type GroupColor } from './rules';
+import { getRules, saveRules, type GroupRule, type GroupColor, type MatchMode } from './rules';
 import { generateId } from '../utils/id';
 
 export interface ConfigFile {
@@ -59,7 +59,7 @@ export async function importConfigFile(file: File, mode: 'replace' | 'merge' = '
     throw new Error('Invalid config file: expected { tabbySitter: { rules: [...] } }');
   }
 
-  const VALID_MATCH_MODES = new Set(['contains', 'regex']);
+  const VALID_MATCH_MODES = new Set(['contains', 'regex', 'domain']);
 
   const rules = (parsed.tabbySitter.rules as any[]).map((r) => ({
     id: (r.id || generateId()) as string,
@@ -72,7 +72,7 @@ export async function importConfigFile(file: File, mode: 'replace' | 'merge' = '
     groupName: (r.groupName || '') as string,
     description: r.description as string | undefined,
     color: r.color as GroupColor | undefined,
-    matchMode: VALID_MATCH_MODES.has(String(r.matchMode)) ? (r.matchMode as 'contains' | 'regex') : 'contains',
+    matchMode: VALID_MATCH_MODES.has(String(r.matchMode)) ? (r.matchMode as MatchMode) : 'contains',
     enabled: typeof r.enabled === 'boolean' ? r.enabled : undefined,
   }));
 
@@ -170,6 +170,7 @@ export interface ExtensionSettings {
   duplicateTabMode: DuplicateTabMode;
   duplicateTabDomains: string;
   duplicateTabConfirm: boolean;
+  keepOpenedTabsInGroup: boolean;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -177,6 +178,7 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   duplicateTabMode: 'allow',
   duplicateTabDomains: '',
   duplicateTabConfirm: true,
+  keepOpenedTabsInGroup: true,
 };
 
 export async function getSettings(): Promise<ExtensionSettings> {

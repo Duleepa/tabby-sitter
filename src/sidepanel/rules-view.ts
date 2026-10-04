@@ -93,6 +93,7 @@ function renderEditForm(rule: GroupRule): string {
       <select class="edit-matchMode">
         <option value="contains"${rule.matchMode === 'contains' ? ' selected' : ''}>Contains</option>
         <option value="regex"${rule.matchMode === 'regex' ? ' selected' : ''}>Regex</option>
+        <option value="domain"${rule.matchMode === 'domain' ? ' selected' : ''}>Domain</option>
       </select>
 
       <label class="edit-label">Group Name</label>

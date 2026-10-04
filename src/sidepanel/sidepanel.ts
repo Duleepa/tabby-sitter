@@ -28,14 +28,19 @@ function initHeader() {
     chrome.tabs.create({}).catch((err) => console.error('[Sidepanel] new tab failed', err));
   });
 
-  $('organizeTabs')?.addEventListener('click', async () => {
+  $('organizeTabs')?.addEventListener('click', async (e) => {
     const btn = $('organizeTabs') as HTMLButtonElement;
     if (btn.disabled) return;
     btn.textContent = '…';
     btn.disabled = true;
 
     try {
-      const response = (await chrome.runtime.sendMessage({ action: 'organizeAllTabs' }));
+      const windowId = (await chrome.windows.getCurrent()).id;
+      const response: { success?: boolean } | undefined = await chrome.runtime.sendMessage({
+        action: 'organizeAllTabs',
+        windowId,
+        allWindows: e.shiftKey,
+      });
       btn.textContent = response?.success ? 'Organized ✓' : 'Failed';
     } catch (err) {
       btn.textContent = 'Error';

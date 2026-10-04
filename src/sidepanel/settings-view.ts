@@ -62,6 +62,14 @@ export async function initSettingsView() {
     await saveSettings(current);
   });
 
+  const keepToggle = $('keepOpenedTabsInGroup') as HTMLInputElement;
+  keepToggle.checked = settings.keepOpenedTabsInGroup;
+  keepToggle.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.keepOpenedTabsInGroup = keepToggle.checked;
+    await saveSettings(current);
+  });
+
   const modeSelect = $('duplicateTabMode') as HTMLSelectElement;
   const domainsInput = $('duplicateTabDomains') as HTMLInputElement;
   const confirmToggle = $('duplicateTabConfirm') as HTMLInputElement;

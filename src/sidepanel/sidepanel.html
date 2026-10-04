@@ -13,7 +13,7 @@
         <h1>Tabby Sitter</h1>
       </div>
       <div class="header-actions">
-        <button id="organizeTabs" class="outline small" title="Organize all open tabs against your rules">Organize</button>
+        <button id="organizeTabs" class="outline small" title="Apply your rules to this window (Shift-click: all windows)">Organize</button>
         <button id="newTab" class="small" title="Open a new tab">+ New tab</button>
       </div>
       <div id="status" role="status" aria-live="polite"></div>
@@ -50,7 +50,11 @@ or regex patterns if using Regex mode"></textarea>
         <select id="matchMode">
           <option value="contains" selected>Contains</option>
           <option value="regex">Regex</option>
+          <option value="domain">Domain</option>
         </select>
+        <p class="hint" id="matchModeHint">
+          Domain: one hostname per pattern, e.g. <code>github.com</code>. Matches that host and its subdomains (not <code>notgithub.com</code>); a leading <code>www.</code> is ignored.
+        </p>
 
         <label for="groupName">Group Name</label>
         <input type="text" id="groupName" placeholder="Group name (e.g. GitHub)" />
@@ -130,6 +134,18 @@ or regex patterns if using Regex mode"></textarea>
           <label class="toggle-label" for="duplicateTabConfirm">Confirmation dialog</label>
           <input type="checkbox" class="rule-toggle" id="duplicateTabConfirm" />
         </div>
+      </article>
+
+      <article class="card">
+        <div class="card-header-row">
+          <h2>Keep tabs in their group</h2>
+          <label class="toggle-label">
+            <input type="checkbox" class="rule-toggle" id="keepOpenedTabsInGroup" />
+          </label>
+        </div>
+        <p class="hint">
+          Keep tabs opened from a group in that group when no rule matches them. Rules for a different group still win.
+        </p>
       </article>
 
       <article class="card">
