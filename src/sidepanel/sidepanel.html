@@ -26,14 +26,17 @@
     </nav>
 
     <section class="tab-panel tabs-panel" id="tabsPanel" role="tabpanel">
+      <div id="notices" class="notices" aria-live="polite"></div>
       <div class="toolbar">
         <input type="search" id="search" placeholder="Search tabs…  ( / )" aria-label="Search tabs" autocomplete="off" spellcheck="false" />
+        <button id="dupChip" class="chip hidden" type="button" aria-pressed="false">Duplicates (0)</button>
         <select id="scope" aria-label="Scope">
           <option value="window" selected>This window</option>
           <option value="all">All windows</option>
         </select>
       </div>
       <div id="tree" role="tree" aria-label="Open tabs" aria-multiselectable="true"></div>
+      <div id="dupView" class="dup-view hidden" aria-label="Duplicate tabs"></div>
     </section>
 
     <section class="tab-panel scroll hidden" id="rulesPanel" role="tabpanel">
@@ -131,9 +134,20 @@ or regex patterns if using Regex mode"></textarea>
         </div>
 
         <div class="card-header-row">
-          <label class="toggle-label" for="duplicateTabConfirm">Confirmation dialog</label>
+          <label class="toggle-label" for="duplicateTabConfirm">Ask before closing a new duplicate tab</label>
           <input type="checkbox" class="rule-toggle" id="duplicateTabConfirm" />
         </div>
+
+        <div class="card-header-row">
+          <label class="toggle-label" for="duplicateBadge">Show duplicate count on toolbar icon</label>
+          <input type="checkbox" class="rule-toggle" id="duplicateBadge" />
+        </div>
+
+        <label for="duplicateIgnoreParams">Extra query parameters to ignore</label>
+        <input type="text" id="duplicateIgnoreParams" placeholder="ref, source" />
+        <p class="hint">
+          Tracking parameters (<code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, and similar) and <code>#fragments</code> are already ignored. A new duplicate tab is closed and you can undo it; a tab you navigate to a duplicate is never closed, only flagged.
+        </p>
       </article>
 
       <article class="card">

@@ -15,7 +15,11 @@ It auto-organizes browser tabs into tab groups based on user-defined URL pattern
 
 ## Permissions
 
-`tabs`, `tabGroups`, `storage`, `scripting`, `sidePanel` (side panel), plus `<all_urls>` host access for the duplicate-confirm content script. The toolbar action opens the side panel (`setPanelBehavior({ openPanelOnActionClick: true })` in the background); there is no popup. Commands: `organize-tabs` (`Ctrl/Cmd+Shift+O`), `_execute_action` (`Ctrl/Cmd+Shift+Y`). Favicons use `tab.favIconUrl` (http/https/data only); the `favicon` permission is not used.
+`tabs`, `tabGroups`, `storage`, `sidePanel` (side panel). No host permissions, no content scripts, no `scripting`: duplicate notices live in the side panel. The toolbar action opens the side panel (`setPanelBehavior({ openPanelOnActionClick: true })` in the background); there is no popup. Commands: `organize-tabs` (`Ctrl/Cmd+Shift+O`), `_execute_action` (`Ctrl/Cmd+Shift+Y`). Favicons use `tab.favIconUrl` (http/https/data only); the `favicon` permission is not used.
+
+## Duplicate handling
+
+Order in `handleDuplicateTab`: fresh vs non-fresh (consumed once) -> startup grace -> mode/domain gate -> `allowOnce` / `allowedDuplicateTabs` -> pick existing tab (same window first, then most recently accessed). Only a *fresh* tab with "Ask before closing" off is closed (with an Undo notice); every other duplicate is only *flagged*. Navigated tabs are never closed. The toolbar badge shows `duplicateCount` (debounced `setTimeout`, never `setInterval`).
 
 ## Manual overrides
 
@@ -25,11 +29,15 @@ Tabs the user places by hand (side panel drag/drop and group menu actions, or a 
 - `freshTabs`: tabId → creation time, consumed on first real-URL evaluation (duplicate handling)
 - `tabCreated`: tabId → creation time (5 s), for the new-tab grace period
 - `manualTabs`: number[] of overridden tab ids
+- `duplicateNotices`: `DuplicateNotice[]` (max 5, 60 s TTL; `closed` = auto-closed new duplicate with Undo, `flagged` = duplicate kept)
+- `allowedDuplicateTabs`: tabId → normalised URL the user chose to keep
+- `startupAt`: browser start time; tabs created within 10 s are session restores, never "fresh" and never duplicate-handled
 
 ### Runtime messages (to background)
 - `{ action: 'organizeAllTabs', windowId?, allWindows? }`
 - `{ action: 'processTabs', tabIds }`: re-run rules for those tabs now
-- `{ action: 'switchToExisting', existingTabId, newTabId }`
+- `{ action: 'duplicateNotice', id, choice: 'switch' | 'keep' | 'undo' | 'dismiss' }`
+- `{ action: 'closeDuplicates', keys? }`: close all duplicates except `pickKeeper` per cluster (never pinned tabs)
 
 ## Architecture
 
@@ -37,7 +45,6 @@ Tabs the user places by hand (side panel drag/drop and group menu actions, or a 
 src/
   background/         Service worker — event-driven tab processing
   sidepanel/          Side panel UI (HTML + TS + CSS): tab tree, rules, settings
-  content/            Content script (in-page duplicate confirm bar)
   test/               Vitest setup (chrome stub)
   storage/            Shared rule storage helpers + types
   utils/              Shared utilities
@@ -56,11 +63,16 @@ src/
 | `src/sidepanel/drop.ts` | Pure: `computeDrop` (tab drags) and `computeGroupMove` (group drags). Unit-tested. |
 | `src/sidepanel/tab-actions.ts` | `chrome.tabs`/`tabGroups` mutations (move, group, ungroup, pin, discard, close) wrapped in `retryTabMutation`. |
 | `src/sidepanel/context-menu.ts` | Custom in-panel menu (items, submenus, inline input, color swatches). |
-| `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export/starter config, duplicate-tab and domain-sorting settings. |
+| `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export/starter config, duplicate-tab (mode, ask first, toolbar badge, extra ignored params), keep-in-group and domain-sorting settings. |
 | `src/background/decide.ts` | Pure `decideTabAction({ url, rules, currentGroupTitle, manual, keepWithOpener })` → group / ungroup / none. Used by both `processTab` and `organizeAllTabs`. |
 | `src/background/expected-changes.ts` | `ExpectedGroupChanges`: tab ids whose group change the extension itself is causing (3 s TTL, injectable clock). |
 | `src/storage/overrides.ts` | Manual overrides (`getOverrides`, `isOverridden`, `addOverrides`, `clearOverrides`) in `chrome.storage.session`; per-call read-modify-write, cache invalidated by `storage.onChanged`. |
-| `src/utils/url.ts` | Shared skip-prefix list, `isRealPageUrl`, `normalizeUrlForDuplicate`. |
+| `src/utils/url.ts` | Shared skip-prefix list, `isRealPageUrl`, `normalizeUrlForDuplicate(url, extraIgnoredParams)` (drops fragment, `www.`, tracking params, sorts params), `parseIgnoreParams`. |
+| `src/utils/duplicates.ts` | Pure: `findDuplicateClusters`, `pickKeeper`, `tabsToClose`, `duplicateCount`, `pickExistingTab`. Shared by background (badge, closeDuplicates) and panel (chip, Duplicates view) so counts agree. |
+| `src/utils/notices.ts` | Pure notice-list helpers (`pruneNotices`, `addNoticeTo`, `removeFlaggedForTab`). |
+| `src/storage/duplicates.ts` | Session storage for notices and allowed duplicate tabs (background is the only writer, serialised). |
+| `src/background/allow-once.ts` | `AllowOnce`: URLs reopened by Undo are not treated as duplicates for 10 s. |
+| `src/sidepanel/duplicates-view.ts` | Notice bar, Duplicates chip and Duplicates view. |
 | `src/utils/tabs.ts` | `retryTabMutation` (shared by background and side panel). |
 | `src/utils/id.ts` | Simple ID generation utility. |
 
@@ -185,6 +197,8 @@ When adding a new feature:
 5. Reload the extension in `chrome://extensions/` after each build.
 
 ## Build Scripts
+
+Node.js is pinned in `mise.toml` (`mise install`). mise tasks wrap the npm scripts: `mise run setup | build | dev | test | lint | check` (`check` = build + test + lint; run it before a PR).
 
 | Command | Action |
 |---------|--------|

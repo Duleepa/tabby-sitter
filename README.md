@@ -24,12 +24,14 @@
 - **Side panel tab manager**: A live tab tree with search, multi-select, drag & drop in/out of groups, a right-click menu (move to group, new group, pin, unload, close), inline group rename and color, and an all-windows view. Open it from the toolbar icon or `Ctrl/Cmd+Shift+Y`.
 - **Respects manual moves**: Tabs you drag in or out of groups (in the panel or the tab strip) are left alone by the rules until you choose "Let rules manage" from the tab menu. Tabs opened from a grouped tab stay in that group unless a rule says otherwise.
 - **Domain match mode**: Match by hostname (`github.com` also matches `gist.github.com`, never `notgithub.com`). "Always group this site here" in the tab menu creates or extends a domain rule.
+- **Smart duplicate handling**: Optionally stop the same page being open twice, across all windows. Tracking parameters (`utm_*`, `fbclid`, ...) and `#fragments` are ignored, and you can add more. A new duplicate tab is closed and switches to the existing one, with an Undo; a tab you navigate to a duplicate is never closed, only flagged ("Switch & close this" / "Keep both"). A Duplicates view lists clusters with "Keep this one" and "Close all duplicates", and the toolbar icon shows the count.
+- **Minimal permissions**: `tabs`, `tabGroups`, `storage`, `sidePanel`. No host access, no content scripts.
 - **Organize**: Applies rules to the panel's window; Shift-click organizes all windows.
 - **Rules and Settings** live in the same panel.
 
 ## Installation (Developer Mode)
 
-1. **Build the extension**:
+1. **Build the extension** (needs Node.js 24; with [mise](https://mise.jdx.dev) run `mise install` first and it is pinned for you):
    ```bash
    npm install
    npm run build
@@ -81,6 +83,16 @@ Export your rules as a JSON file to sync across computers:
 A **Starter Config** with example rules is also available for download.
 
 ## Development
+
+The toolchain is pinned in `mise.toml`. With [mise](https://mise.jdx.dev) installed:
+
+```bash
+mise install         # Install the pinned Node.js
+mise run setup       # npm ci
+mise run check       # Build + test + lint
+```
+
+Or use npm directly:
 
 ```bash
 npm install          # Install dependencies

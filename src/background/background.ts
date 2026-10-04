@@ -4,7 +4,19 @@ import { addOverrides, clearOverrides, getOverrides } from '../storage/overrides
 import { decideTabAction, type TabAction } from './decide';
 import { ExpectedGroupChanges } from './expected-changes';
 import { retryTabMutation } from '../utils/tabs';
-import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate } from '../utils/url';
+import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate, parseIgnoreParams } from '../utils/url';
+import { duplicateCount, findDuplicateClusters, pickExistingTab, tabsToClose } from '../utils/duplicates';
+import {
+  addNotice,
+  allowDuplicateTab,
+  forgetAllowedDuplicate,
+  getAllowedDuplicates,
+  getNotices,
+  removeFlaggedNoticesForTab,
+  removeNotice,
+} from '../storage/duplicates';
+import { AllowOnce } from './allow-once';
+import { generateId } from '../utils/id';
 
 console.log('[Background] Tabby Sitter started.');
 
@@ -158,36 +170,6 @@ async function handleGroupChange(tabId: number, newGroupId: number): Promise<voi
   console.log(`[Background] Tab ${tabId} placed manually (group ${newGroupId}); rules will leave it alone`);
 }
 
-function waitForTabReady(tabId: number, timeoutMs = 8000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      chrome.tabs.onUpdated.removeListener(listener);
-      reject(new Error('Tab load timeout'));
-    }, timeoutMs);
-
-    const listener = (id: number, info: chrome.tabs.TabChangeInfo) => {
-      if (id === tabId && info.status === 'complete') {
-        clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(listener);
-        setTimeout(resolve, 150);
-      }
-    };
-    chrome.tabs.onUpdated.addListener(listener);
-
-    chrome.tabs.get(tabId).then((t) => {
-      if (t.status === 'complete') {
-        clearTimeout(timer);
-        chrome.tabs.onUpdated.removeListener(listener);
-        setTimeout(resolve, 150);
-      }
-    }).catch(() => {
-      clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(listener);
-      reject(new Error('Tab not found'));
-    });
-  });
-}
-
 async function switchToExistingAndClose(existingTabId: number, newTabId: number): Promise<void> {
   const existing = await chrome.tabs.get(existingTabId);
   await chrome.tabs.update(existingTabId, { active: true });
@@ -197,62 +179,177 @@ async function switchToExistingAndClose(existingTabId: number, newTabId: number)
   });
 }
 
+const STARTUP_GRACE_MS = 10000;
+const STARTUP_KEY = 'startupAt';
+
+// Browser start time. Set synchronously in onStartup (so onCreated events that
+// race the storage write still see it) and persisted for service worker restarts.
+let startupAt: number | undefined;
+let startupLoaded: Promise<void> | null = null;
+
+function loadStartup(): Promise<void> {
+  startupLoaded ??= (async () => {
+    try {
+      const result = await chrome.storage.session.get<{ startupAt?: number }>(STARTUP_KEY);
+      if (startupAt === undefined && result.startupAt !== undefined) startupAt = result.startupAt;
+    } catch (err) {
+      console.warn('[Background] Failed to load startup time', err);
+    }
+  })();
+  return startupLoaded;
+}
+
+async function inStartupGrace(): Promise<boolean> {
+  await loadStartup();
+  return startupAt !== undefined && Date.now() - startupAt < STARTUP_GRACE_MS;
+}
+
+chrome.runtime.onStartup.addListener(() => {
+  startupAt = Date.now();
+  chrome.storage.session
+    .set({ [STARTUP_KEY]: startupAt })
+    .catch((err) => console.warn('[Background] Failed to persist startup time', err));
+  scheduleBadgeUpdate();
+});
+
+// URLs the user just asked to reopen (Undo); not treated as duplicates for 10 s.
+const allowOnce = new AllowOnce();
+
+/**
+ * Decision order: fresh vs non-fresh (consumed exactly once) -> startup grace ->
+ * mode/domain gate -> allowOnce / allowedDuplicateTabs -> pick the existing tab.
+ * Only a fresh tab with "ask first" off is closed; every other duplicate just
+ * gets a flagged notice. Returns true only when the tab was closed.
+ */
 async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
   if (!tab.id || !isRealPageUrl(tab.url)) return false;
+  const tabId = tab.id;
+  const url = tab.url;
 
-  // Only fresh tabs may be auto-closed; this also ensures one evaluation per tab.
-  if (!(await consumeFreshTab(tab.id))) return false;
+  const fresh = await consumeFreshTab(tabId);
+  if (await inStartupGrace()) return false;
 
   const settings = await getSettings();
-
   if (settings.duplicateTabMode === 'allow') return false;
-
-  const normalized = normalizeUrlForDuplicate(tab.url);
-  if (!normalized) return false;
-
-  const allTabs = await chrome.tabs.query({});
-  const existingTab = allTabs.find(
-    (t) =>
-      t.id !== tab.id &&
-      !t.pendingUrl &&
-      !!t.url &&
-      normalizeUrlForDuplicate(t.url) === normalized
-  );
-  if (!existingTab || !existingTab.id) return false;
-
   if (settings.duplicateTabMode === 'prevent-specific') {
     try {
-      const hostname = new URL(tab.url).hostname.toLowerCase();
-      const domains = parseDomains(settings.duplicateTabDomains);
-      if (!domains.some((d) => hostnameMatchesDomain(hostname, d))) {
-        return false;
-      }
+      const hostname = new URL(url).hostname.toLowerCase();
+      if (!parseDomains(settings.duplicateTabDomains).some((d) => hostnameMatchesDomain(hostname, d))) return false;
     } catch {
       return false;
     }
   }
 
-  const newTabId = tab.id;
-  const existingTabId = existingTab.id;
+  const extra = parseIgnoreParams(settings.duplicateIgnoreParams);
+  const normalized = normalizeUrlForDuplicate(url, extra);
+  if (!normalized) return false;
 
-  if (settings.duplicateTabConfirm) {
-    try {
-      await waitForTabReady(newTabId);
-      await chrome.tabs.sendMessage(newTabId, {
-        action: 'showDuplicateConfirm',
-        data: { newTabId, existingTabId, url: tab.url },
-      });
-    } catch (err) {
-      console.warn('[Background] Failed to show confirmation bar, auto-closing:', err);
-      await switchToExistingAndClose(existingTabId, newTabId);
-    }
+  if (allowOnce.consume(normalized)) {
+    await allowDuplicateTab(tabId, normalized);
+    return false;
+  }
+  if ((await getAllowedDuplicates())[String(tabId)] === normalized) return false;
+
+  const allTabs = await chrome.tabs.query({});
+  const existing = pickExistingTab(
+    allTabs.filter(
+      (t) =>
+        t.id !== tabId &&
+        !t.pendingUrl &&
+        isRealPageUrl(t.url) &&
+        normalizeUrlForDuplicate(t.url, extra) === normalized
+    ),
+    tab.windowId
+  );
+  if (!existing?.id) return false;
+
+  const notice = {
+    id: generateId(),
+    tabId,
+    existingTabId: existing.id,
+    url,
+    title: tab.title,
+    windowId: tab.windowId,
+    index: tab.index,
+    at: Date.now(),
+  };
+
+  if (fresh && !settings.duplicateTabConfirm) {
+    await switchToExistingAndClose(existing.id, tabId);
+    await addNotice({ ...notice, kind: 'closed' });
+    console.log(`[Background] Switched to existing tab ${existing.id}, closed duplicate ${tabId}`);
     return true;
   }
 
-  await switchToExistingAndClose(existingTabId, newTabId);
-  console.log(`[Background] Switched to existing tab ${existingTabId}, closed duplicate ${newTabId}`);
-  return true;
+  await addNotice({ ...notice, kind: 'flagged' });
+  return false;
 }
+
+async function handleDuplicateNotice(id: string, choice: string): Promise<void> {
+  const notice = (await getNotices()).find((n) => n.id === id);
+  if (!notice) return;
+  const extra = parseIgnoreParams((await getSettings()).duplicateIgnoreParams);
+  const normalized = normalizeUrlForDuplicate(notice.url, extra);
+
+  if (choice === 'switch' && notice.tabId !== undefined) {
+    try {
+      await switchToExistingAndClose(notice.existingTabId, notice.tabId);
+    } catch (err) {
+      console.warn('[Background] switch from notice failed', err);
+    }
+  } else if (choice === 'keep' && notice.tabId !== undefined && normalized) {
+    await allowDuplicateTab(notice.tabId, normalized);
+  } else if (choice === 'undo' && normalized) {
+    allowOnce.allow(normalized);
+    let created: chrome.tabs.Tab;
+    try {
+      created = await chrome.tabs.create({ url: notice.url, windowId: notice.windowId, index: notice.index });
+    } catch {
+      created = await chrome.tabs.create({ url: notice.url }); // window or index no longer valid
+    }
+    if (created.id !== undefined) await allowDuplicateTab(created.id, normalized);
+  }
+  await removeNotice(id);
+}
+
+async function closeDuplicates(keys?: string[]): Promise<void> {
+  const extra = parseIgnoreParams((await getSettings()).duplicateIgnoreParams);
+  const focused = (await chrome.windows.getLastFocused()).id;
+  const wanted = keys ? new Set(keys) : null;
+  const clusters = findDuplicateClusters(await chrome.tabs.query({}), extra).filter(
+    (c) => !wanted || wanted.has(c.key)
+  );
+  const ids = clusters.flatMap((c) => tabsToClose(c, focused).flatMap((t) => (t.id === undefined ? [] : [t.id])));
+  if (ids.length > 0) await retryTabMutation(() => chrome.tabs.remove(ids));
+}
+
+let badgeTimer: ReturnType<typeof setTimeout> | undefined;
+
+function scheduleBadgeUpdate(): void {
+  clearTimeout(badgeTimer);
+  badgeTimer = setTimeout(() => {
+    updateBadge().catch((err) => console.warn('[Background] badge update failed', err));
+  }, 300);
+}
+
+async function updateBadge(): Promise<void> {
+  const settings = await getSettings();
+  if (!settings.duplicateBadge) {
+    await chrome.action.setBadgeText({ text: '' });
+    return;
+  }
+  const count = duplicateCount(
+    findDuplicateClusters(await chrome.tabs.query({}), parseIgnoreParams(settings.duplicateIgnoreParams))
+  );
+  await chrome.action.setBadgeBackgroundColor({ color: '#64748b' });
+  await chrome.action.setBadgeText({ text: count === 0 ? '' : count > 99 ? '99+' : String(count) });
+}
+
+scheduleBadgeUpdate();
+chrome.runtime.onInstalled.addListener(scheduleBadgeUpdate);
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === 'local' && changes.settings) scheduleBadgeUpdate();
+});
 
 
 async function findGroupInWindow(
@@ -445,22 +542,25 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     );
   }
   if (changeInfo.url && tab.id) {
-    handleDuplicateTab(tab).then((handled) => {
-      if (handled) return;
-      processTab(tab).catch((err) =>
-        console.error('[Background] processTab failed on onUpdated', err)
-      );
-    }).catch((err) =>
-      console.error('[Background] handleDuplicateTab failed on onUpdated', err)
-    );
+    scheduleBadgeUpdate();
+    // A flagged notice is obsolete once its tab navigates; then re-evaluate.
+    removeFlaggedNoticesForTab(tab.id)
+      .then(() => handleDuplicateTab(tab))
+      .then((handled) => {
+        if (handled) return;
+        return processTab(tab);
+      })
+      .catch((err) => console.error('[Background] onUpdated handling failed', err));
   }
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
   if (!tab.id) return;
   const tabId = tab.id;
+  scheduleBadgeUpdate();
   recordCreated(tabId).catch(() => {});
-  markTabFresh(tabId).then(() => {
+  // Tabs created during browser startup are session restores: never fresh.
+  inStartupGrace().then((grace) => (grace ? undefined : markTabFresh(tabId))).then(() => {
     // Link-opened tabs often have an empty url (only pendingUrl); the real URL
     // is evaluated when it arrives via onUpdated.
     if (!tab.url) return;
@@ -477,8 +577,13 @@ chrome.tabs.onCreated.addListener((tab) => {
   );
 });
 
+chrome.tabs.onReplaced.addListener(scheduleBadgeUpdate);
+
 chrome.tabs.onRemoved.addListener((tabId) => {
   forgetFreshTab(tabId).catch(() => {});
+  removeFlaggedNoticesForTab(tabId).catch(() => {});
+  forgetAllowedDuplicate(tabId).catch(() => {});
+  scheduleBadgeUpdate();
   expectedChanges.forget(tabId);
   clearOverrides([tabId]).catch(() => {});
 });
@@ -509,12 +614,18 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
       .catch((err) => sendResponse({ success: false, error: String(err) }));
     return true;
   }
-  if (request.action === 'switchToExisting') {
-    const { existingTabId, newTabId } = request as { existingTabId: number; newTabId: number };
-    switchToExistingAndClose(existingTabId, newTabId)
-      .catch((err) => {
-        console.error('[Background] switchToExisting failed', err);
-      });
+  if (request.action === 'duplicateNotice') {
+    const { id, choice } = request as { id: string; choice: string };
+    handleDuplicateNotice(id, choice)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: String(err) }));
+    return true;
+  }
+  if (request.action === 'closeDuplicates') {
+    const { keys } = request as { keys?: string[] };
+    closeDuplicates(keys)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: String(err) }));
     return true;
   }
   return false;

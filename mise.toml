@@ -1,0 +1,26 @@
+[tools]
+node = "24"
+
+[tasks.setup]
+description = "Install npm dependencies"
+run = "npm ci"
+
+[tasks.build]
+description = "Type-check and bundle the extension into dist/"
+run = "npm run build"
+
+[tasks.dev]
+description = "Vite dev mode with HMR"
+run = "npm run dev"
+
+[tasks.test]
+description = "Run unit tests"
+run = "npm test"
+
+[tasks.lint]
+description = "Run ESLint"
+run = "npm run lint"
+
+[tasks.check]
+description = "Build, test and lint (run before opening a PR)"
+depends = ["build", "test", "lint"]
