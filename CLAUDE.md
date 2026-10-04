@@ -17,6 +17,20 @@ It auto-organizes browser tabs into tab groups based on user-defined URL pattern
 
 `tabs`, `tabGroups`, `storage`, `scripting`, `sidePanel` (side panel), plus `<all_urls>` host access for the duplicate-confirm content script. The toolbar action opens the side panel (`setPanelBehavior({ openPanelOnActionClick: true })` in the background); there is no popup. Commands: `organize-tabs` (`Ctrl/Cmd+Shift+O`), `_execute_action` (`Ctrl/Cmd+Shift+Y`). Favicons use `tab.favIconUrl` (http/https/data only); the `favicon` permission is not used.
 
+## Manual overrides
+
+Tabs the user places by hand (side panel drag/drop and group menu actions, or a group change in the tab strip that the extension did not cause) are stored as overrides. `processTab` and `organizeAllTabs` skip them. Background code must call `groupTabs()`/`ungroupTabs()` (which record the tab ids in `ExpectedGroupChanges` first) instead of `chrome.tabs.group/ungroup` directly, otherwise its own changes would be mistaken for manual moves. Group changes within 1.5 s of tab creation are ignored (Chrome puts link-opened tabs into the opener's group natively). "Let rules manage" clears the override. Setting `keepOpenedTabsInGroup` (default on) stops unmatched tabs opened from a group tab from being ungrouped.
+
+### Session storage keys (`chrome.storage.session`)
+- `freshTabs`: tabId → creation time, consumed on first real-URL evaluation (duplicate handling)
+- `tabCreated`: tabId → creation time (5 s), for the new-tab grace period
+- `manualTabs`: number[] of overridden tab ids
+
+### Runtime messages (to background)
+- `{ action: 'organizeAllTabs', windowId?, allWindows? }`
+- `{ action: 'processTabs', tabIds }`: re-run rules for those tabs now
+- `{ action: 'switchToExisting', existingTabId, newTabId }`
+
 ## Architecture
 
 ```
@@ -43,6 +57,9 @@ src/
 | `src/sidepanel/tab-actions.ts` | `chrome.tabs`/`tabGroups` mutations (move, group, ungroup, pin, discard, close) wrapped in `retryTabMutation`. |
 | `src/sidepanel/context-menu.ts` | Custom in-panel menu (items, submenus, inline input, color swatches). |
 | `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export/starter config, duplicate-tab and domain-sorting settings. |
+| `src/background/decide.ts` | Pure `decideTabAction({ url, rules, currentGroupTitle, manual, keepWithOpener })` → group / ungroup / none. Used by both `processTab` and `organizeAllTabs`. |
+| `src/background/expected-changes.ts` | `ExpectedGroupChanges`: tab ids whose group change the extension itself is causing (3 s TTL, injectable clock). |
+| `src/storage/overrides.ts` | Manual overrides (`getOverrides`, `isOverridden`, `addOverrides`, `clearOverrides`) in `chrome.storage.session`; per-call read-modify-write, cache invalidated by `storage.onChanged`. |
 | `src/utils/url.ts` | Shared skip-prefix list, `isRealPageUrl`, `normalizeUrlForDuplicate`. |
 | `src/utils/tabs.ts` | `retryTabMutation` (shared by background and side panel). |
 | `src/utils/id.ts` | Simple ID generation utility. |
@@ -70,7 +87,7 @@ Transient tab mutation errors (e.g., during tab drag) are handled by `retryTabMu
 Rules support two match modes:
 
 ```typescript
-export type MatchMode = 'contains' | 'regex';
+export type MatchMode = 'contains' | 'regex' | 'domain';
 
 export interface GroupRule {
   id: string;
@@ -87,13 +104,16 @@ Matching uses the **full URL href** (not just hostname):
 ```typescript
 export function matchesRule(url: string, rule: GroupRule): boolean {
   try {
-    const href = new URL(url).href.toLowerCase();
+    const parsed = new URL(url);
+    const href = parsed.href.toLowerCase();
+    const hostname = parsed.hostname.toLowerCase();
     return rule.patterns.some((p) => {
       if (rule.matchMode === 'regex') {
         if (p.length > 5000) return false; // safety limit
         try { return new RegExp(p, 'i').test(href); }
         catch { return false; }
       }
+      if (rule.matchMode === 'domain') return hostMatchesDomain(hostname, p);
       return href.includes(p.toLowerCase());
     });
   } catch {
@@ -103,6 +123,7 @@ export function matchesRule(url: string, rule: GroupRule): boolean {
 ```
 
 - **`contains`** mode: case-insensitive substring match against the full URL
+- **`domain`** mode: hostname-only. `github.com` matches `github.com` and `gist.github.com`, not `notgithub.com`; a leading `www.` in the pattern is ignored; invalid URLs never match
 - **`regex`** mode: case-insensitive regex match (patterns capped at 5000 chars to prevent catastrophic backtracking)
 - `matchesPattern()` is **removed** — use `matchesRule()` instead
 
@@ -115,7 +136,7 @@ interface GroupRule {
   groupName: string;          // e.g. "Dev"
   description?: string;
   color?: GroupColor;
-  matchMode: MatchMode;       // "contains" | "regex"
+  matchMode: MatchMode;       // "contains" | "regex" | "domain"
 }
 ```
 

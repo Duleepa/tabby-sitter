@@ -1,6 +1,8 @@
 import { retryTabMutation } from '../utils/tabs';
 import { computeDrop, computeGroupMove, planMoves, type DropTab, type DropTarget } from './drop';
 import { nextUnusedColor } from './tab-tree';
+import { addOverrides, clearOverrides } from '../storage/overrides';
+import { addDomainRule, type DomainRuleOutcome, type GroupColor } from '../storage/rules';
 
 type Ids = [number, ...number[]];
 
@@ -32,6 +34,7 @@ export async function closeTabs(ids: number[]): Promise<void> {
 export async function moveToGroup(ids: number[], groupId: number): Promise<void> {
   const list = nonEmpty(ids);
   if (!list) return;
+  await addOverrides(ids);
   await unpinTabs(await pinnedAmong(list));
   await retryTabMutation(() => chrome.tabs.group({ tabIds: list, groupId }));
 }
@@ -44,6 +47,7 @@ export async function moveToNewGroup(
 ): Promise<void> {
   const list = nonEmpty(ids);
   if (!list) return;
+  await addOverrides(ids);
   await unpinTabs(await pinnedAmong(list));
   const groupId = await retryTabMutation(() =>
     chrome.tabs.group({ tabIds: list, createProperties: { windowId } })
@@ -54,6 +58,7 @@ export async function moveToNewGroup(
 export async function removeFromGroup(ids: number[]): Promise<void> {
   const list = nonEmpty(ids);
   if (!list) return;
+  await addOverrides(ids);
   await retryTabMutation(() => chrome.tabs.ungroup(list));
 }
 
@@ -124,6 +129,9 @@ export async function applyDrop(draggedIds: number[], target: DropTarget): Promi
     if (!plan) return;
   }
 
+  // Hand-placed tabs are exempt from rule regrouping.
+  await addOverrides(draggedIds);
+
   // chrome.tabs.move with several ids is not atomic, so move one tab at a time.
   for (const m of planMoves(all, plan)) {
     await retryTabMutation(() => chrome.tabs.move(m.tabId, { windowId: m.windowId, index: m.index }));
@@ -147,4 +155,32 @@ export async function applyGroupMove(groupId: number, target: DropTarget): Promi
   await retryTabMutation(() =>
     chrome.tabGroups.move(plan.groupId, { windowId: plan.windowId, index: plan.index })
   );
+}
+
+/** Clear the manual override and ask the background to apply rules to these tabs now. */
+export async function letRulesManage(ids: number[]): Promise<void> {
+  await clearOverrides(ids);
+  await chrome.runtime.sendMessage({ action: 'processTabs', tabIds: ids });
+}
+
+export function siteHost(url: string | undefined): string | null {
+  if (!url || !/^https?:/i.test(url)) return null;
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '') || null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Always group this site here": create/extend a domain rule, then let rules manage the tab. */
+export async function alwaysGroupSite(
+  tab: chrome.tabs.Tab,
+  groupTitle: string,
+  color: GroupColor | undefined
+): Promise<(DomainRuleOutcome & { host: string; groupTitle: string }) | null> {
+  const host = siteHost(tab.url);
+  if (!host || tab.id === undefined) return null;
+  const outcome = await addDomainRule(host, groupTitle, color);
+  await letRulesManage([tab.id]);
+  return { ...outcome, host, groupTitle };
 }

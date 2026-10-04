@@ -22,6 +22,9 @@
 - **Persistent rules**: Your grouping rules are saved in Chrome storage and survive browser restarts.
 - **Config file sync**: Export/import rules as JSON for cross-machine sync (e.g. via Dropbox, iCloud, Obsidian vault). Starter config included.
 - **Side panel tab manager**: A live tab tree with search, multi-select, drag & drop in/out of groups, a right-click menu (move to group, new group, pin, unload, close), inline group rename and color, and an all-windows view. Open it from the toolbar icon or `Ctrl/Cmd+Shift+Y`.
+- **Respects manual moves**: Tabs you drag in or out of groups (in the panel or the tab strip) are left alone by the rules until you choose "Let rules manage" from the tab menu. Tabs opened from a grouped tab stay in that group unless a rule says otherwise.
+- **Domain match mode**: Match by hostname (`github.com` also matches `gist.github.com`, never `notgithub.com`). "Always group this site here" in the tab menu creates or extends a domain rule.
+- **Organize**: Applies rules to the panel's window; Shift-click organizes all windows.
 - **Rules and Settings** live in the same panel.
 
 ## Installation (Developer Mode)

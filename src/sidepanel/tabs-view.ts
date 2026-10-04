@@ -13,9 +13,13 @@ import {
   removeFromGroup,
   setPinned,
   toDropTabs,
+  alwaysGroupSite,
+  letRulesManage,
+  siteHost,
   ungroupGroup,
   updateGroup,
 } from './tab-actions';
+import { getOverrides } from '../storage/overrides';
 import { buildWindowTree, filterTree, GROUP_COLORS, type WindowTree } from './tab-tree';
 
 interface RowRef {
@@ -38,6 +42,7 @@ const state = {
   drag: null as DragState,
   editing: false,
   order: [] as RowRef[],
+  manual: new Set<number>(),
 };
 
 let treeEl: HTMLElement;
@@ -79,6 +84,7 @@ async function refreshData(): Promise<void> {
   ]);
   state.tabs = tabs;
   state.groups = groups;
+  state.manual = new Set(await getOverrides());
   const ids = new Set(tabs.map((t) => t.id));
   for (const id of state.selection) if (!ids.has(id)) state.selection.delete(id);
 }
@@ -168,6 +174,9 @@ function tabRow(tab: chrome.tabs.Tab, level: number): HTMLElement {
   if (host) row.appendChild(el('span', 'host', undefined, host));
   if (tab.audible) row.appendChild(el('span', 'ind', { 'aria-label': 'Playing audio' }, '🔊'));
   else if (tab.mutedInfo?.muted) row.appendChild(el('span', 'ind', { 'aria-label': 'Muted' }, '🔇'));
+  if (state.manual.has(id)) {
+    row.appendChild(el('span', 'ind manual', { role: 'img', 'aria-label': 'Placed manually', title: "Rules won't move this tab" }, '✋'));
+  }
   row.appendChild(el('button', 'close', { type: 'button', 'aria-label': 'Close tab', tabindex: '-1' }, '×'));
   state.order.push({ key: `t:${id}`, kind: 'tab', id });
   return row;
@@ -390,6 +399,40 @@ function openGroupMenu(groupId: number, x: number, y: number): void {
   ]);
 }
 
+function reportAlwaysGroup(
+  p: Promise<{ host: string; groupTitle: string; result: string; changed: boolean; movedAbove?: string } | null>
+): void {
+  p.then((r) => {
+    if (!r) return;
+    if (!r.changed) showStatus(`${r.host} already groups into ${r.groupTitle}`);
+    else if (r.movedAbove) {
+      showStatus(`Added ${r.host} to ${r.groupTitle} (moved above “${r.movedAbove}” so it takes priority)`);
+    } else showStatus(`Added ${r.host} to ${r.groupTitle}`);
+  }).catch(fail);
+}
+
+function siteRuleItems(tab: chrome.tabs.Tab | undefined): MenuItem[] {
+  const host = tab ? siteHost(tab.url) : null;
+  if (!tab || !host) return [];
+  const titled = state.groups.filter((g) => g.windowId === tab.windowId && g.title);
+  const group = tab.groupId !== -1 ? groupById(tab.groupId) : undefined;
+  const always = (g: chrome.tabGroups.TabGroup) => () =>
+    reportAlwaysGroup(alwaysGroupSite(tab, g.title ?? '', g.color));
+  if (group?.title) {
+    return [{ type: 'item', label: `Always group “${host}” in “${group.title}”`, onSelect: always(group) }];
+  }
+  if (tab.groupId === -1 && titled.length > 0) {
+    return [
+      {
+        type: 'submenu',
+        label: `Always group “${host}” in`,
+        items: titled.map((g) => ({ type: 'item' as const, label: g.title ?? '', onSelect: always(g) })),
+      },
+    ];
+  }
+  return [];
+}
+
 function openTabMenu(tabId: number, x: number, y: number): void {
   const ids = actionTargets(tabId);
   const tabs = ids.map(tabById).filter((t): t is chrome.tabs.Tab => !!t);
@@ -411,7 +454,17 @@ function openTabMenu(tabId: number, x: number, y: number): void {
   });
 
   const allPinned = tabs.every((t) => t.pinned);
-  const items: MenuItem[] = [
+  const items: MenuItem[] = [];
+  if (tabs.some((t) => state.manual.has(t.id as number))) {
+    items.push({
+      type: 'item',
+      label: 'Let rules manage',
+      onSelect: () => run(letRulesManage(ids)),
+    });
+  }
+  items.push(...siteRuleItems(tabById(tabId)));
+  if (items.length > 0) items.push({ type: 'separator' });
+  items.push(
     { type: 'submenu', label: 'Move to group', items: groupItems },
     {
       type: 'item',
@@ -431,8 +484,8 @@ function openTabMenu(tabId: number, x: number, y: number): void {
       onSelect: () => run(discardTabs(tabs)),
     },
     { type: 'separator' },
-    { type: 'item', label: ids.length > 1 ? `Close ${ids.length} tabs` : 'Close', danger: true, onSelect: () => run(closeTabs(ids)) },
-  ];
+    { type: 'item', label: ids.length > 1 ? `Close ${ids.length} tabs` : 'Close', danger: true, onSelect: () => run(closeTabs(ids)) }
+  );
   if (first.groupId !== -1) {
     const others = state.tabs
       .filter((t) => t.groupId === first.groupId && t.id !== undefined && !ids.includes(t.id))
@@ -839,6 +892,9 @@ export function initTabsView(): void {
     chrome.tabGroups.onMoved,
   ];
   for (const ev of events) ev.addListener(scheduleRender);
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'session' && changes.manualTabs) scheduleRender();
+  });
 
   chrome.windows
     .getCurrent()

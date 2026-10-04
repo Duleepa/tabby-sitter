@@ -1,5 +1,8 @@
-import { getRules, getActiveRules, matchesRule } from '../storage/rules';
+import { getRules, getActiveRules, type GroupRule } from '../storage/rules';
 import { getSettings } from '../storage/config';
+import { addOverrides, clearOverrides, getOverrides } from '../storage/overrides';
+import { decideTabAction, type TabAction } from './decide';
+import { ExpectedGroupChanges } from './expected-changes';
 import { retryTabMutation } from '../utils/tabs';
 import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate } from '../utils/url';
 
@@ -80,6 +83,79 @@ async function consumeFreshTab(tabId: number): Promise<boolean> {
   freshTabs.delete(tabId);
   persistFreshTabs();
   return Date.now() - created <= FRESH_TAB_TTL_MS;
+}
+
+const CREATED_TTL_MS = 5000;
+const NEW_TAB_GRACE_MS = 1500;
+const CREATED_KEY = 'tabCreated';
+
+// tabId -> creation time (kept after the fresh-tab entry is consumed), mirrored
+// to chrome.storage.session. Used to ignore Chrome's native "opened from a
+// grouped tab joins that group" change.
+const createdAt = new Map<number, number>();
+let createdLoaded: Promise<void> | null = null;
+
+function loadCreated(): Promise<void> {
+  createdLoaded ??= (async () => {
+    try {
+      const result = await chrome.storage.session.get<{ tabCreated?: Record<string, number> }>(CREATED_KEY);
+      for (const [id, t] of Object.entries(result.tabCreated ?? {})) {
+        if (!createdAt.has(Number(id))) createdAt.set(Number(id), t);
+      }
+    } catch (err) {
+      console.warn('[Background] Failed to load creation times', err);
+    }
+  })();
+  return createdLoaded;
+}
+
+function persistCreated(): void {
+  const now = Date.now();
+  for (const [id, t] of createdAt) if (now - t > CREATED_TTL_MS) createdAt.delete(id);
+  chrome.storage.session
+    .set({ [CREATED_KEY]: Object.fromEntries(createdAt) })
+    .catch((err) => console.warn('[Background] Failed to persist creation times', err));
+}
+
+async function recordCreated(tabId: number): Promise<void> {
+  await loadCreated();
+  createdAt.set(tabId, Date.now());
+  persistCreated();
+}
+
+async function wasJustCreated(tabId: number): Promise<boolean> {
+  await loadCreated();
+  const t = createdAt.get(tabId);
+  return t !== undefined && Date.now() - t < NEW_TAB_GRACE_MS;
+}
+
+// Group changes the extension is about to cause (in-memory, ~3 s).
+const expectedChanges = new ExpectedGroupChanges();
+
+async function groupTabs(options: { tabIds: number | number[]; groupId?: number }): Promise<number> {
+  expectedChanges.expect(options.tabIds);
+  const tabIds = options.tabIds as [number, ...number[]];
+  return retryTabMutation(() =>
+    chrome.tabs.group(options.groupId === undefined ? { tabIds } : { tabIds, groupId: options.groupId })
+  );
+}
+
+async function ungroupTabs(tabIds: number | number[]): Promise<void> {
+  expectedChanges.expect(tabIds);
+  await retryTabMutation(() => chrome.tabs.ungroup(tabIds as [number, ...number[]]));
+}
+
+async function handleGroupChange(tabId: number, newGroupId: number): Promise<void> {
+  if (expectedChanges.consume(tabId)) return;
+  if (await wasJustCreated(tabId)) return;
+  try {
+    await chrome.tabs.get(tabId);
+    if (newGroupId !== -1) await chrome.tabGroups.get(newGroupId);
+  } catch {
+    return; // tab or group is gone
+  }
+  await addOverrides([tabId]);
+  console.log(`[Background] Tab ${tabId} placed manually (group ${newGroupId}); rules will leave it alone`);
 }
 
 function waitForTabReady(tabId: number, timeoutMs = 8000): Promise<void> {
@@ -187,8 +263,17 @@ async function findGroupInWindow(
   return groups.find((g) => g.title === groupName)?.id ?? -1;
 }
 
-async function processTab(tab: chrome.tabs.Tab): Promise<void> {
-  if (!tab.id || !tab.windowId) return;
+async function groupTitleOf(groupId: number): Promise<string | undefined> {
+  if (groupId === -1) return undefined;
+  try {
+    return (await chrome.tabGroups.get(groupId)).title;
+  } catch {
+    return undefined; // group closed
+  }
+}
+
+async function processTab(tab: Pick<chrome.tabs.Tab, 'id'>): Promise<void> {
+  if (!tab.id) return;
 
   let freshTab: chrome.tabs.Tab;
   try {
@@ -196,62 +281,78 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   } catch {
     return;
   }
-  if (!freshTab.url) return;
+  const tabId = freshTab.id;
+  if (tabId === undefined || !freshTab.url) return;
 
-  const rules = getActiveRules(await getRules());
-  const ruleGroupNames = new Set(rules.map((r) => r.groupName));
-
-  const matchedRule = rules.find((r) => matchesRule(freshTab.url!, r)) ?? null;
+  const [allRules, settings, overrides] = await Promise.all([getRules(), getSettings(), getOverrides()]);
   const currentGroupId = freshTab.groupId ?? -1;
 
-  let currentGroupTitle: string | undefined;
-  if (currentGroupId !== -1) {
+  let keepWithOpener = false;
+  if (settings.keepOpenedTabsInGroup && currentGroupId !== -1 && freshTab.openerTabId !== undefined) {
     try {
-      currentGroupTitle = (await chrome.tabGroups.get(currentGroupId)).title;
+      keepWithOpener = (await chrome.tabs.get(freshTab.openerTabId)).groupId === currentGroupId;
     } catch {
-      /* group closed */
+      /* opener closed */
     }
   }
-  const isAutoManaged = !!currentGroupTitle && ruleGroupNames.has(currentGroupTitle);
 
-  if (matchedRule) {
-    if (currentGroupTitle === matchedRule.groupName) return;
+  const action = decideTabAction({
+    url: freshTab.url,
+    rules: getActiveRules(allRules),
+    currentGroupTitle: await groupTitleOf(currentGroupId),
+    manual: overrides.has(tabId),
+    keepWithOpener,
+  });
 
-    let groupId = await findGroupInWindow(matchedRule.groupName, freshTab.windowId);
+  if (action.kind === 'group') {
+    const rule = action.rule;
+    let groupId = await findGroupInWindow(rule.groupName, freshTab.windowId);
     if (groupId === -1) {
-      groupId = await retryTabMutation(() =>
-        chrome.tabs.group({ tabIds: freshTab.id! })
-      );
-      await chrome.tabGroups.update(groupId, {
-        title: matchedRule.groupName,
-        color: matchedRule.color || 'blue',
-      });
+      groupId = await groupTabs({ tabIds: tabId });
+      await chrome.tabGroups.update(groupId, { title: rule.groupName, color: rule.color || 'blue' });
     } else {
-      await retryTabMutation(() => chrome.tabs.move(freshTab.id!, { index: -1 }));
-      await retryTabMutation(() =>
-        chrome.tabs.group({ tabIds: freshTab.id!, groupId })
-      );
+      // Moving a grouped tab can implicitly change its group; expect that too.
+      expectedChanges.expect(tabId);
+      await retryTabMutation(() => chrome.tabs.move(tabId, { index: -1 }));
+      await groupTabs({ tabIds: tabId, groupId });
     }
-
-    console.log(
-      `[Background] Tab ${freshTab.id} moved to group "${matchedRule.groupName}" in window ${freshTab.windowId}`
-    );
-    return;
-  }
-
-  if (currentGroupId !== -1 && isAutoManaged) {
-    await retryTabMutation(() => chrome.tabs.ungroup(freshTab.id!));
-    console.log(`[Background] Tab ${freshTab.id} ungrouped (no matching rule)`);
+    console.log(`[Background] Tab ${tabId} moved to group "${rule.groupName}" in window ${freshTab.windowId}`);
+  } else if (action.kind === 'ungroup') {
+    await ungroupTabs(tabId);
+    console.log(`[Background] Tab ${tabId} ungrouped (no matching rule)`);
   }
 }
 
-export async function organizeAllTabs(): Promise<void> {
-  const tabs = await chrome.tabs.query({ currentWindow: true });
+export interface OrganizeOptions {
+  /** Window to organize; defaults to the current (focused) window. */
+  windowId?: number;
+  /** Organize every normal window. */
+  allWindows?: boolean;
+}
+
+export async function organizeAllTabs(options: OrganizeOptions = {}): Promise<void> {
+  if (options.allWindows) {
+    const windows = await chrome.windows.getAll({ windowTypes: ['normal'] });
+    for (const w of windows) {
+      if (w.id !== undefined) await organizeWindow(w.id);
+    }
+    return;
+  }
+  let windowId = options.windowId;
+  if (windowId === undefined) {
+    const tabs = await chrome.tabs.query({ currentWindow: true });
+    if (tabs.length === 0) return;
+    windowId = tabs[0].windowId;
+  }
+  await organizeWindow(windowId);
+}
+
+async function organizeWindow(windowId: number): Promise<void> {
+  const tabs = await chrome.tabs.query({ windowId });
   if (tabs.length === 0) return;
 
-  const windowId = tabs[0].windowId;
-  const rules = getActiveRules(await getRules());
-  const ruleGroupNames = new Set(rules.map((r) => r.groupName));
+  const [allRules, settings, overrides] = await Promise.all([getRules(), getSettings(), getOverrides()]);
+  const rules = getActiveRules(allRules);
 
   const groups = await chrome.tabGroups.query({ windowId });
   const groupNameToId = new Map<string, number>();
@@ -262,62 +363,50 @@ export async function organizeAllTabs(): Promise<void> {
       groupIdToTitle.set(group.id, group.title);
     }
   }
+  const tabById = new Map(tabs.map((t) => [t.id, t]));
 
-  const tabsToGroup = new Map<string, number[]>();
+  const tabsToGroup = new Map<string, { rule: GroupRule; ids: number[] }>();
   const tabsToUngroup: number[] = [];
 
   for (const tab of tabs) {
     if (!tab.id || !tab.url || isSkippableUrl(tab.url)) continue;
 
-    const matchedRule = rules.find((r) => matchesRule(tab.url!, r)) ?? null;
     const currentGroupId = tab.groupId ?? -1;
-    const currentGroupTitle = groupIdToTitle.get(currentGroupId) || '';
-    const isAutoManaged = !!currentGroupTitle && ruleGroupNames.has(currentGroupTitle);
+    const opener = tab.openerTabId !== undefined ? tabById.get(tab.openerTabId) : undefined;
+    const action: TabAction = decideTabAction({
+      url: tab.url,
+      rules,
+      currentGroupTitle: groupIdToTitle.get(currentGroupId),
+      manual: overrides.has(tab.id),
+      keepWithOpener: settings.keepOpenedTabsInGroup && currentGroupId !== -1 && opener?.groupId === currentGroupId,
+    });
 
-    if (matchedRule) {
-      if (currentGroupTitle === matchedRule.groupName) continue;
-      if (!tabsToGroup.has(matchedRule.groupName)) {
-        tabsToGroup.set(matchedRule.groupName, []);
-      }
-      tabsToGroup.get(matchedRule.groupName)!.push(tab.id);
-    } else if (currentGroupId !== -1 && isAutoManaged) {
+    if (action.kind === 'group') {
+      const entry = tabsToGroup.get(action.rule.groupName) ?? { rule: action.rule, ids: [] };
+      entry.ids.push(tab.id);
+      tabsToGroup.set(action.rule.groupName, entry);
+    } else if (action.kind === 'ungroup') {
       tabsToUngroup.push(tab.id);
     }
   }
 
-  for (const [groupName, tabIds] of tabsToGroup) {
-    if (tabIds.length === 0) continue;
-
+  for (const [groupName, { rule, ids }] of tabsToGroup) {
     let groupId = groupNameToId.get(groupName) ?? -1;
 
     if (groupId === -1) {
-      const rule = rules.find((r) => r.groupName === groupName)!;
-      groupId = await retryTabMutation(() =>
-        chrome.tabs.group({ tabIds: [tabIds[0]] })
-      );
-      await chrome.tabGroups.update(groupId, {
-        title: rule.groupName,
-        color: rule.color || 'blue',
-      });
+      groupId = await groupTabs({ tabIds: [ids[0]] });
+      await chrome.tabGroups.update(groupId, { title: rule.groupName, color: rule.color || 'blue' });
       groupNameToId.set(groupName, groupId);
-
-      if (tabIds.length > 1) {
-        await retryTabMutation(() =>
-          chrome.tabs.group({ tabIds: tabIds.slice(1), groupId })
-        );
-      }
+      if (ids.length > 1) await groupTabs({ tabIds: ids.slice(1), groupId });
     } else {
-      await retryTabMutation(() =>
-        chrome.tabs.group({ tabIds, groupId })
-      );
+      await groupTabs({ tabIds: ids, groupId });
     }
   }
 
   if (tabsToUngroup.length > 0) {
-    await retryTabMutation(() => chrome.tabs.ungroup(tabsToUngroup));
+    await ungroupTabs(tabsToUngroup);
   }
 
-  const settings = await getSettings();
   if (settings.groupUnmatchedByDomain) {
     await new Promise((r) => setTimeout(r, 200));
     const freshTabs = await chrome.tabs.query({ windowId });
@@ -349,7 +438,12 @@ async function sortUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
   }
 }
 
-chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.groupId !== undefined) {
+    handleGroupChange(tabId, changeInfo.groupId).catch((err) =>
+      console.error('[Background] handleGroupChange failed', err)
+    );
+  }
   if (changeInfo.url && tab.id) {
     handleDuplicateTab(tab).then((handled) => {
       if (handled) return;
@@ -365,6 +459,7 @@ chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
 chrome.tabs.onCreated.addListener((tab) => {
   if (!tab.id) return;
   const tabId = tab.id;
+  recordCreated(tabId).catch(() => {});
   markTabFresh(tabId).then(() => {
     // Link-opened tabs often have an empty url (only pendingUrl); the real URL
     // is evaluated when it arrives via onUpdated.
@@ -384,16 +479,34 @@ chrome.tabs.onCreated.addListener((tab) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => {
   forgetFreshTab(tabId).catch(() => {});
+  expectedChanges.forget(tabId);
+  clearOverrides([tabId]).catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === 'organizeAllTabs') {
-    organizeAllTabs()
+    const { windowId, allWindows } = request as OrganizeOptions;
+    organizeAllTabs({ windowId, allWindows })
       .then(() => sendResponse({ success: true }))
       .catch((err) => {
         console.error('[Background] organizeAllTabs failed', err);
         sendResponse({ success: false, error: String(err) });
       });
+    return true;
+  }
+  if (request.action === 'processTabs') {
+    const { tabIds } = request as { tabIds: number[] };
+    (async () => {
+      for (const id of tabIds) {
+        try {
+          await processTab({ id });
+        } catch (err) {
+          console.error('[Background] processTabs failed for tab', id, err);
+        }
+      }
+    })()
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: String(err) }));
     return true;
   }
   if (request.action === 'switchToExisting') {
@@ -409,6 +522,6 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
 
 chrome.commands.onCommand.addListener((command) => {
   if (command === 'organize-tabs') {
-    organizeAllTabs();
+    organizeAllTabs().catch((err) => console.error('[Background] organize command failed', err));
   }
 });
