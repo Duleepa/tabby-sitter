@@ -2,38 +2,46 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tabby Sitter</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <header>
       <div class="brand">
-        <img src="../../icons/icon32.png" alt="Tabby Sitter" class="brand-icon" />
+        <img src="../../icons/icon32.png" alt="" class="brand-icon" />
         <h1>Tabby Sitter</h1>
       </div>
-      <nav>
-        <button id="organizeTabs" class="outline" title="Organize all open tabs">
-          📋 Organize All Tabs
-        </button>
-      </nav>
-      <div id="status"></div>
+      <div class="header-actions">
+        <button id="organizeTabs" class="outline small" title="Organize all open tabs against your rules">Organize</button>
+        <button id="newTab" class="small" title="Open a new tab">+ New tab</button>
+      </div>
+      <div id="status" role="status" aria-live="polite"></div>
     </header>
 
-    <nav class="tabs" aria-label="Sections">
-      <button class="tab-btn active" data-tab="rules">Rules</button>
-      <button class="tab-btn" data-tab="add">Add</button>
-      <button class="tab-btn" data-tab="config">Config</button>
+    <nav class="tabs" role="tablist" aria-label="Sections">
+      <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tabsPanel" data-tab="tabs">Tabs</button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="rulesPanel" data-tab="rules">Rules</button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="settingsPanel" data-tab="settings">Settings</button>
     </nav>
 
-    <section class="tab-panel" id="rulesPanel">
-      <article class="card">
-        <div id="rulesList"></div>
-      </article>
+    <section class="tab-panel tabs-panel" id="tabsPanel" role="tabpanel">
+      <div class="toolbar">
+        <input type="search" id="search" placeholder="Search tabs…  ( / )" aria-label="Search tabs" autocomplete="off" spellcheck="false" />
+        <select id="scope" aria-label="Scope">
+          <option value="window" selected>This window</option>
+          <option value="all">All windows</option>
+        </select>
+      </div>
+      <div id="tree" role="tree" aria-label="Open tabs" aria-multiselectable="true"></div>
     </section>
 
-    <section class="tab-panel hidden" id="addPanel">
-      <article class="card">
-        <h2>Add Rule</h2>
+    <section class="tab-panel scroll hidden" id="rulesPanel" role="tabpanel">
+      <div class="rules-head">
+        <button id="showAddRule" class="small" aria-expanded="false" aria-controls="addRulePanel">＋ Add rule</button>
+      </div>
+      <article class="card hidden" id="addRulePanel">
+        <h2>New rule</h2>
         <label for="patterns">Patterns</label>
         <textarea id="patterns" rows="3" placeholder="github.com, stackoverflow.com
 or regex patterns if using Regex mode"></textarea>
@@ -63,11 +71,17 @@ or regex patterns if using Regex mode"></textarea>
         <label for="description">Description (optional)</label>
         <input type="text" id="description" placeholder="E.g. GitHub repos and issues" />
 
-        <button id="addRule">Add Rule</button>
+        <div class="edit-actions">
+          <button id="addRule" class="small">Add Rule</button>
+          <button id="cancelAddRule" class="outline small" type="button">Cancel</button>
+        </div>
+      </article>
+      <article class="card">
+        <div id="rulesList"></div>
       </article>
     </section>
 
-    <section class="tab-panel hidden" id="configPanel">
+    <section class="tab-panel scroll hidden" id="settingsPanel" role="tabpanel">
       <article class="card">
         <h2>Export Rules</h2>
         <p class="hint">
@@ -139,6 +153,6 @@ or regex patterns if using Regex mode"></textarea>
       <a href="https://github.com/Duleepa/tabby-sitter" target="_blank" rel="noopener">Contribute</a>
     </footer>
 
-    <script type="module" src="./popup.ts"></script>
+    <script type="module" src="./sidepanel.ts"></script>
   </body>
 </html>

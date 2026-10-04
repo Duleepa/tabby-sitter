@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "vitest run"
   },
   "overrides": {
     "esbuild": "^0.25.0",
@@ -19,13 +20,14 @@
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0-beta.28",
-    "@types/chrome": "^0.0.268",
+    "@types/chrome": "^0.0.326",
     "@typescript-eslint/eslint-plugin": "^8.59.1",
     "@typescript-eslint/parser": "^8.59.1",
     "eslint": "^10.3.0",
     "typescript": "^5.4.5",
     "typescript-eslint": "^8.59.1",
     "typescript-language-server": "^5.1.3",
-    "vite": "^6.4.2"
+    "vite": "^6.4.2",
+    "vitest": "^5.0.3"
   }
 }

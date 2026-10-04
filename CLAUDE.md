@@ -13,12 +13,18 @@ It auto-organizes browser tabs into tab groups based on user-defined URL pattern
 - **Storage**: `chrome.storage.local` for rule persistence
 - **No external runtime dependencies** — keep it lightweight.
 
+## Permissions
+
+`tabs`, `tabGroups`, `storage`, `scripting`, `sidePanel` (side panel), plus `<all_urls>` host access for the duplicate-confirm content script. The toolbar action opens the side panel (`setPanelBehavior({ openPanelOnActionClick: true })` in the background); there is no popup. Commands: `organize-tabs` (`Ctrl/Cmd+Shift+O`), `_execute_action` (`Ctrl/Cmd+Shift+Y`). Favicons use `tab.favIconUrl` (http/https/data only); the `favicon` permission is not used.
+
 ## Architecture
 
 ```
 src/
   background/         Service worker — event-driven tab processing
-  popup/              Extension popup UI (HTML + TS + CSS)
+  sidepanel/          Side panel UI (HTML + TS + CSS): tab tree, rules, settings
+  content/            Content script (in-page duplicate confirm bar)
+  test/               Vitest setup (chrome stub)
   storage/            Shared rule storage helpers + types
   utils/              Shared utilities
 ```
@@ -30,9 +36,15 @@ src/
 | `src/background/background.ts` | Listens to `chrome.tabs.onUpdated` and `onCreated`, matches URLs against rules, moves/creates tab groups. Exposes `organizeAllTabs()` via message passing. Includes retry logic for transient Chrome tab mutation errors. |
 | `src/storage/rules.ts` | CRUD for grouping rules via `chrome.storage.local`. Supports multiple patterns per rule and `contains`/`regex` match modes. |
 | `src/storage/config.ts` | Import/export rules as JSON config files for cross-machine sync. Includes starter config generation. |
-| `src/popup/popup.ts` | Popup UI logic: tabbed interface (Rules/Add/Config), add/remove rules, organize all tabs, import/export config. |
-| `src/popup/popup.html` | Popup markup with tabbed layout. |
-| `src/popup/styles.css` | Popup styles. |
+| `src/sidepanel/sidepanel.html` / `sidepanel.ts` / `styles.css` | Side panel shell: header (Organize, New tab), Tabs/Rules/Settings tablist, styles (light/dark, 28px rows). Opens from the toolbar icon and `Ctrl/Cmd+Shift+Y`. |
+| `src/sidepanel/tabs-view.ts` | Live tab tree: event-coalesced render (one per animation frame), selection, keyboard nav, search, DnD wiring, context/group menus, inline group rename. Never put tab titles/URLs in `innerHTML`. |
+| `src/sidepanel/tab-tree.ts` | Pure: `buildWindowTree`, `filterTree`, group colors. Unit-tested. |
+| `src/sidepanel/drop.ts` | Pure: `computeDrop` (tab drags) and `computeGroupMove` (group drags). Unit-tested. |
+| `src/sidepanel/tab-actions.ts` | `chrome.tabs`/`tabGroups` mutations (move, group, ungroup, pin, discard, close) wrapped in `retryTabMutation`. |
+| `src/sidepanel/context-menu.ts` | Custom in-panel menu (items, submenus, inline input, color swatches). |
+| `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export/starter config, duplicate-tab and domain-sorting settings. |
+| `src/utils/url.ts` | Shared skip-prefix list, `isRealPageUrl`, `normalizeUrlForDuplicate`. |
+| `src/utils/tabs.ts` | `retryTabMutation` (shared by background and side panel). |
 | `src/utils/id.ts` | Simple ID generation utility. |
 
 ## Development Rules
@@ -65,7 +77,7 @@ export interface GroupRule {
   patterns: string[];
   groupName: string;
   description?: string;
-  color?: chrome.tabGroups.ColorEnum;
+  color?: GroupColor;
   matchMode: MatchMode;
 }
 ```
@@ -102,7 +114,7 @@ interface GroupRule {
   patterns: string[];         // e.g. ["github.com", "gitlab.com"]
   groupName: string;          // e.g. "Dev"
   description?: string;
-  color?: chrome.tabGroups.ColorEnum;
+  color?: GroupColor;
   matchMode: MatchMode;       // "contains" | "regex"
 }
 ```
@@ -111,7 +123,7 @@ Old single-pattern rules (`pattern: string`) are shimmed at runtime in `getRules
 
 ### 5. Config File Sync (Cross-Machine)
 
-Rules can be exported/imported as JSON via the popup for syncing across computers:
+Rules can be exported/imported as JSON via the side panel (Settings tab) for syncing across computers:
 
 ```typescript
 interface ConfigFile {
@@ -123,11 +135,11 @@ interface ConfigFile {
 ```
 
 **Workflow:**
-1. Add rules in the popup → click **Export Rules**
+1. Add rules in the side panel (Rules tab) → click **Export Rules**
 2. Save `tabby-sitter.conf.json` to a synced folder (e.g. Dropbox, Obsidian vault, iCloud)
 3. On another machine, click **Import Rules** and pick the synced file
 
-**Starter Config:** The popup also offers a "Create Starter Config" button that downloads a pre-populated config with example rules.
+**Starter Config:** The Settings tab also offers a "Create Starter Config" button that downloads a pre-populated config with example rules.
 
 **Safety:** Imported files are capped at 1 MB. Regex patterns are capped at 5000 characters.
 
@@ -136,7 +148,7 @@ Chrome extensions cannot access arbitrary filesystem paths for security. The use
 
 ### 6. Types & Type Safety
 - Always import `chrome` types from `@types/chrome` (already in devDependencies).
-- Use `chrome.tabGroups.ColorEnum` not `chrome.tabGroups.Color` (the namespace exports `ColorEnum`).
+- Use the `GroupColor` type from `src/storage/rules.ts` (`` `${chrome.tabGroups.Color}` ``); `@types/chrome` 0.0.326 has no `ColorEnum`.
 
 ### 7. Icons
 - Place source icons in `public/icons/` (sizes: 16, 32, 48, 128).
@@ -145,7 +157,7 @@ Chrome extensions cannot access arbitrary filesystem paths for security. The use
 ### 8. Adding New Features
 
 When adding a new feature:
-1. Keep it inside the existing `src/background`, `src/popup`, `src/storage`, or `src/utils` hierarchy.
+1. Keep it inside the existing `src/background`, `src/sidepanel`, `src/storage`, or `src/utils` hierarchy.
 2. Export shared types from `src/storage/rules.ts`.
 3. Update `manifest.json` **only** if new permissions are required.
 4. Run `npm run build` before testing — CRXJS rebuilds the extension bundle.
@@ -159,6 +171,8 @@ When adding a new feature:
 | `npm run dev` | Start Vite dev mode with HMR |
 | `npm run build` | Type-check + bundle into `dist/` |
 | `npm run preview` | Preview the production build locally |
+| `npm test` | Run unit tests (Vitest; `src/**/*.test.ts`, chrome stub in `src/test/setup.ts`) |
+| `npm run lint` | ESLint (must report 0 errors) |
 
 ## Testing in Chrome
 

@@ -146,19 +146,36 @@ function createBar(data: DuplicateConfirmData): void {
   } catch {
   }
 
-  bar.innerHTML = `
-    <div class="confirm-bar-content">
-      <div class="banner">
-        <span class="banner-icon">⚠️</span>
-        <span class="banner-text">Duplicate Tab</span>
-      </div>
-      <div class="url-display" title="${data.url}">${displayUrl}</div>
-      <div class="actions">
-        <button class="btn-switch">Switch to existing</button>
-        <button class="btn-keep">Keep this tab</button>
-      </div>
-    </div>
-  `;
+  const content = document.createElement('div');
+  content.className = 'confirm-bar-content';
+
+  const banner = document.createElement('div');
+  banner.className = 'banner';
+  const icon = document.createElement('span');
+  icon.className = 'banner-icon';
+  icon.textContent = '⚠️';
+  const text = document.createElement('span');
+  text.className = 'banner-text';
+  text.textContent = 'Duplicate Tab';
+  banner.append(icon, text);
+
+  const urlDisplay = document.createElement('div');
+  urlDisplay.className = 'url-display';
+  urlDisplay.setAttribute('title', data.url);
+  urlDisplay.textContent = displayUrl;
+
+  const actions = document.createElement('div');
+  actions.className = 'actions';
+  const switchButton = document.createElement('button');
+  switchButton.className = 'btn-switch';
+  switchButton.textContent = 'Switch to existing';
+  const keepButton = document.createElement('button');
+  keepButton.className = 'btn-keep';
+  keepButton.textContent = 'Keep this tab';
+  actions.append(switchButton, keepButton);
+
+  content.append(banner, urlDisplay, actions);
+  bar.appendChild(content);
 
   shadow.appendChild(bar);
   barEl = bar;
