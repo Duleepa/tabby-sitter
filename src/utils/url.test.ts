@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate } from './url';
+import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate, parseIgnoreParams } from './url';
 
 describe('normalizeUrlForDuplicate', () => {
   it('strips the fragment', () => {
@@ -14,6 +14,24 @@ describe('normalizeUrlForDuplicate', () => {
   });
   it('keeps the query string', () => {
     expect(normalizeUrlForDuplicate('https://a.com/x/?q=1#h')).toBe('https://a.com/x?q=1');
+  });
+  it('strips a leading www. and lowercases the host', () => {
+    expect(normalizeUrlForDuplicate('https://WWW.Example.com/a')).toBe('https://example.com/a');
+  });
+  it('drops tracking params but keeps meaningful ones', () => {
+    expect(normalizeUrlForDuplicate('https://a.com/p?utm_source=x&id=7&fbclid=1&UTM_Medium=y&si=z')).toBe('https://a.com/p?id=7');
+    expect(normalizeUrlForDuplicate('https://a.com/p?ref=home')).toBe('https://a.com/p?ref=home');
+    expect(normalizeUrlForDuplicate('https://a.com/p?gclid=1&_ga=2')).toBe('https://a.com/p');
+  });
+  it('sorts remaining params so order does not matter', () => {
+    expect(normalizeUrlForDuplicate('https://a.com/p?b=2&a=1')).toBe(normalizeUrlForDuplicate('https://a.com/p?a=1&b=2'));
+  });
+  it('honours the extra ignore list case-insensitively', () => {
+    expect(normalizeUrlForDuplicate('https://a.com/p?Foo=1&k=2', ['foo'])).toBe('https://a.com/p?k=2');
+    expect(normalizeUrlForDuplicate('https://a.com/p?foo=1', [])).toBe('https://a.com/p?foo=1');
+  });
+  it('treats a tracking-only variant as the same page', () => {
+    expect(normalizeUrlForDuplicate('https://a.com/p?utm_source=x')).toBe(normalizeUrlForDuplicate('https://a.com/p'));
   });
   it('returns null for unparsable URLs', () => {
     expect(normalizeUrlForDuplicate('not a url')).toBeNull();
@@ -34,5 +52,12 @@ describe('url helpers', () => {
     expect(isRealPageUrl('chrome://newtab')).toBe(false);
     expect(isRealPageUrl('')).toBe(false);
     expect(isRealPageUrl(undefined)).toBe(false);
+  });
+});
+
+describe('parseIgnoreParams', () => {
+  it('splits, trims and lowercases', () => {
+    expect(parseIgnoreParams(' Foo, bar ,,BAZ ')).toEqual(['foo', 'bar', 'baz']);
+    expect(parseIgnoreParams('')).toEqual([]);
   });
 });

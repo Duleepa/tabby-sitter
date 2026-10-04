@@ -171,6 +171,8 @@ export interface ExtensionSettings {
   duplicateTabDomains: string;
   duplicateTabConfirm: boolean;
   keepOpenedTabsInGroup: boolean;
+  duplicateBadge: boolean;
+  duplicateIgnoreParams: string;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -179,6 +181,8 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   duplicateTabDomains: '',
   duplicateTabConfirm: true,
   keepOpenedTabsInGroup: true,
+  duplicateBadge: true,
+  duplicateIgnoreParams: '',
 };
 
 export async function getSettings(): Promise<ExtensionSettings> {

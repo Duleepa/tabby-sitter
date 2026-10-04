@@ -1,6 +1,7 @@
 import { showStatus } from './dom';
 import { initRulesView } from './rules-view';
 import { initSettingsView } from './settings-view';
+import { initDuplicatesView } from './duplicates-view';
 import { initTabsView } from './tabs-view';
 
 const $ = (id: string) => document.getElementById(id);
@@ -59,5 +60,6 @@ function initHeader() {
 
 initHeader();
 initTabsView();
+initDuplicatesView();
 initRulesView().catch((err) => showStatus('Failed to load rules: ' + String(err)));
 initSettingsView().catch((err) => showStatus('Failed to load settings: ' + String(err)));

@@ -13,6 +13,9 @@
   --hover: rgba(15, 23, 42, 0.06);
   --selected: rgba(37, 99, 235, 0.14);
   --row-h: 28px;
+  --amber: #b45309;
+  --amber-bg: rgba(245, 158, 11, 0.14);
+  --amber-solid: #f59e0b;
   --secondary: #475569;
   --radius: 10px;
   --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
@@ -31,6 +34,9 @@
     --primary-light: #1e3a8a;
     --hover: rgba(255, 255, 255, 0.08);
     --selected: rgba(96, 165, 250, 0.22);
+    --amber: #fcd34d;
+    --amber-bg: rgba(251, 191, 36, 0.16);
+    --amber-solid: #fbbf24;
     --secondary: #cbd5e1;
     --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
     --shadow-hover: 0 4px 6px rgba(0,0,0,0.3), 0 2px 4px rgba(0,0,0,0.2);
@@ -817,4 +823,192 @@ footer .sep {
 .row .ind.manual {
   opacity: 0.55;
   font-size: 0.65rem;
+}
+
+/* Duplicate notices */
+.notices:empty {
+  display: none;
+}
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: 0.78rem;
+  background: var(--primary-light);
+  border-bottom: 1px solid var(--border);
+}
+.notice-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notice-btn {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  box-shadow: none;
+}
+.notice-x {
+  flex-shrink: 0;
+  padding: 0 6px;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 1rem;
+}
+.notice-btn:hover,
+.notice-x:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Duplicates chip + view */
+.chip {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  box-shadow: none;
+  white-space: nowrap;
+}
+.chip.active {
+  background: var(--primary);
+  color: #fff;
+}
+.chip:hover {
+  transform: none;
+  box-shadow: none;
+}
+.dup-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+.dup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.dup-summary {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.dup-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+}
+.dup-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dup-url {
+  font-size: 0.7rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 4px;
+}
+.dup-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 4px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+.dup-row:hover,
+.dup-row:focus-visible {
+  background: var(--hover);
+  outline: none;
+}
+.dup-where {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dup-keep {
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  box-shadow: none;
+}
+.dup-close {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: transparent;
+  color: var(--muted);
+  box-shadow: none;
+  font-size: 1rem;
+  line-height: 1;
+}
+.dup-keep:hover,
+.dup-close:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Duplicate markers in the tree */
+.row.dup-extra:not(.active):not(.selected) {
+  background: var(--amber-bg);
+}
+.row.dup-peer {
+  box-shadow: inset 0 0 0 1.5px var(--amber-solid);
+}
+.dup-pill {
+  flex-shrink: 0;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--amber-bg);
+  color: var(--amber);
+  border: 1px solid var(--amber-solid);
+  font-size: 0.65rem;
+  font-weight: 600;
+  line-height: 1;
+  box-shadow: none;
+}
+.dup-pill:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--amber-solid);
+  color: #1f1300;
+}
+.row.pin .favicon {
+  position: relative;
+  overflow: visible;
+}
+.dup-dot {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber-solid);
+  box-shadow: 0 0 0 1.5px var(--bg);
 }

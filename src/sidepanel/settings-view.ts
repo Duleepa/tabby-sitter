@@ -62,6 +62,21 @@ export async function initSettingsView() {
     await saveSettings(current);
   });
 
+  const badgeToggle = $('duplicateBadge') as HTMLInputElement;
+  const ignoreInput = $('duplicateIgnoreParams') as HTMLInputElement;
+  badgeToggle.checked = settings.duplicateBadge;
+  ignoreInput.value = settings.duplicateIgnoreParams;
+  badgeToggle.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.duplicateBadge = badgeToggle.checked;
+    await saveSettings(current);
+  });
+  ignoreInput.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.duplicateIgnoreParams = ignoreInput.value.trim();
+    await saveSettings(current);
+  });
+
   const keepToggle = $('keepOpenedTabsInGroup') as HTMLInputElement;
   keepToggle.checked = settings.keepOpenedTabsInGroup;
   keepToggle.addEventListener('change', async () => {

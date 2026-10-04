@@ -20,6 +20,14 @@ import {
   updateGroup,
 } from './tab-actions';
 import { getOverrides } from '../storage/overrides';
+import { getSettings } from '../storage/config';
+import {
+  findDuplicateClusters,
+  otherCopiesToClose,
+  tabsToClose,
+  type DuplicateCluster,
+} from '../utils/duplicates';
+import { parseIgnoreParams } from '../utils/url';
 import { buildWindowTree, filterTree, GROUP_COLORS, type WindowTree } from './tab-tree';
 
 interface RowRef {
@@ -44,6 +52,47 @@ const state = {
   order: [] as RowRef[],
   manual: new Set<number>(),
 };
+
+export interface ViewData {
+  tabs: chrome.tabs.Tab[];
+  groups: chrome.tabGroups.TabGroup[];
+  windowId: number;
+  allWindows: boolean;
+}
+
+let dataHook: ((data: ViewData) => void) | null = null;
+
+/** Called after every render with the freshly queried data (used by the duplicates UI). */
+export function onViewData(cb: (data: ViewData) => void): void {
+  dataHook = cb;
+}
+
+interface DupInfo {
+  cluster: DuplicateCluster<chrome.tabs.Tab>;
+  /** pickKeeper would close this copy. */
+  extra: boolean;
+  otherWindow: boolean;
+}
+
+let ignoreParams: string[] = [];
+let dupByTab = new Map<number, DupInfo>();
+let peerCluster: DuplicateCluster<chrome.tabs.Tab> | null = null;
+
+function computeDuplicates(): void {
+  dupByTab = new Map();
+  for (const cluster of findDuplicateClusters(state.tabs, ignoreParams)) {
+    const closing = new Set(tabsToClose(cluster, state.windowId));
+    const otherWindow = new Set(cluster.tabs.map((t) => t.windowId)).size > 1;
+    for (const tab of cluster.tabs) {
+      if (tab.id !== undefined) dupByTab.set(tab.id, { cluster, extra: closing.has(tab), otherWindow });
+    }
+  }
+}
+
+function dupLabel(info: DupInfo): string {
+  const n = info.cluster.tabs.length - 1;
+  return `Also open in ${n} other tab${n === 1 ? '' : 's'}${info.otherWindow ? ' · another window' : ''}`;
+}
 
 let treeEl: HTMLElement;
 let searchEl: HTMLInputElement;
@@ -154,10 +203,13 @@ function tabLabel(tab: chrome.tabs.Tab): string {
 
 function tabRow(tab: chrome.tabs.Tab, level: number): HTMLElement {
   const id = tab.id as number;
+  const dup = dupByTab.get(id);
   const flags = [
     tab.active ? 'active' : '',
     state.selection.has(id) ? 'selected' : '',
     tab.discarded ? 'discarded' : '',
+    dup ? 'dup' : '',
+    dup?.extra ? 'dup-extra' : '',
   ].filter(Boolean);
   const row = el('div', `row tab-row ${flags.join(' ')}`.trim(), {
     role: 'treeitem',
@@ -177,6 +229,12 @@ function tabRow(tab: chrome.tabs.Tab, level: number): HTMLElement {
   if (state.manual.has(id)) {
     row.appendChild(el('span', 'ind manual', { role: 'img', 'aria-label': 'Placed manually', title: "Rules won't move this tab" }, '✋'));
   }
+  if (dup) {
+    const label = dupLabel(dup);
+    row.appendChild(
+      el('button', 'dup-pill', { type: 'button', tabindex: '-1', title: label, 'aria-label': label }, `${dup.cluster.tabs.length}×`)
+    );
+  }
   row.appendChild(el('button', 'close', { type: 'button', 'aria-label': 'Close tab', tabindex: '-1' }, '×'));
   state.order.push({ key: `t:${id}`, kind: 'tab', id });
   return row;
@@ -184,22 +242,24 @@ function tabRow(tab: chrome.tabs.Tab, level: number): HTMLElement {
 
 function pinnedRow(tab: chrome.tabs.Tab): HTMLElement {
   const id = tab.id as number;
+  const dup = dupByTab.get(id);
   const row = el(
     'div',
-    `row pin${tab.active ? ' active' : ''}${state.selection.has(id) ? ' selected' : ''}${tab.discarded ? ' discarded' : ''}`,
+    `row pin${dup ? ' dup' : ''}${dup?.extra ? ' dup-extra' : ''}${tab.active ? ' active' : ''}${state.selection.has(id) ? ' selected' : ''}${tab.discarded ? ' discarded' : ''}`,
     {
       role: 'treeitem',
       tabindex: '-1',
       draggable: 'true',
       'aria-level': '1',
       'aria-selected': String(state.selection.has(id)),
-      'aria-label': tabLabel(tab),
+      'aria-label': dup ? `${tabLabel(tab)} (${dupLabel(dup)})` : tabLabel(tab),
       'data-key': `t:${id}`,
       'data-tab-id': String(id),
-      title: `${tabLabel(tab)}\n${tab.url ?? ''}`,
+      title: `${tabLabel(tab)}\n${tab.url ?? ''}${dup ? `\n${dupLabel(dup)}` : ''}`,
     }
   );
   row.appendChild(faviconEl(tab));
+  if (dup) row.appendChild(el('span', 'dup-dot', { 'aria-hidden': 'true' }));
   state.order.push({ key: `t:${id}`, kind: 'tab', id });
   return row;
 }
@@ -258,6 +318,8 @@ function render(): void {
   const focusedKey = focusInTree ? (active as HTMLElement).dataset.key ?? null : null;
   if (focusedKey) state.focusKey = focusedKey;
 
+  computeDuplicates();
+  peerCluster = null;
   state.order = [];
   const windowIds = state.allWindows
     ? [...new Set(state.tabs.map((t) => t.windowId))].sort((a, b) =>
@@ -281,6 +343,7 @@ function render(): void {
 
   treeEl.replaceChildren(frag);
   treeEl.scrollTop = scrollTop;
+  dataHook?.({ tabs: state.tabs, groups: state.groups, windowId: state.windowId, allWindows: state.allWindows });
 
   const target = state.order.find((r) => r.key === state.focusKey) ?? state.order[0];
   if (target) {
@@ -460,6 +523,16 @@ function openTabMenu(tabId: number, x: number, y: number): void {
       type: 'item',
       label: 'Let rules manage',
       onSelect: () => run(letRulesManage(ids)),
+    });
+  }
+  const dupInfo = dupByTab.get(tabId);
+  const copies = dupInfo ? otherCopiesToClose(dupInfo.cluster, dupInfo.cluster.tabs.find((t) => t.id === tabId) as chrome.tabs.Tab) : [];
+  if (dupInfo) {
+    items.push({
+      type: 'item',
+      label: 'Close other copies',
+      disabled: copies.length === 0,
+      onSelect: () => run(closeTabs(copies.flatMap((t) => (t.id === undefined ? [] : [t.id])))),
     });
   }
   items.push(...siteRuleItems(tabById(tabId)));
@@ -656,6 +729,10 @@ function onClick(e: MouseEvent): void {
     run(closeTabs([ref.id]));
     return;
   }
+  if (target.closest('.dup-pill')) {
+    cycleCopy(ref.id);
+    return;
+  }
   if (e.shiftKey && state.anchor !== null) {
     const ids = visibleTabIds();
     const a = ids.indexOf(state.anchor);
@@ -677,6 +754,41 @@ function onClick(e: MouseEvent): void {
   paintSelection();
   const tab = tabById(ref.id);
   if (tab) run(activateTab(tab));
+}
+
+/** Activate the next copy in the cluster (cluster order, wrapping) and focus its row if visible. */
+function cycleCopy(tabId: number): void {
+  const info = dupByTab.get(tabId);
+  if (!info) return;
+  const tabs = info.cluster.tabs;
+  const at = tabs.findIndex((t) => t.id === tabId);
+  const next = tabs[(at + 1) % tabs.length];
+  if (next.id === undefined) return;
+  state.focusKey = `t:${next.id}`;
+  if (rowByKey(state.focusKey)) focusRow(state.focusKey);
+  run(activateTab(next));
+}
+
+function setPeers(cluster: DuplicateCluster<chrome.tabs.Tab> | null): void {
+  treeEl.querySelectorAll('.dup-peer').forEach((r) => r.classList.remove('dup-peer'));
+  peerCluster = cluster;
+  if (!cluster) return;
+  const ids = new Set(cluster.tabs.map((t) => t.id));
+  treeEl.querySelectorAll<HTMLElement>('.row[data-tab-id]').forEach((r) => {
+    if (ids.has(Number(r.dataset.tabId))) r.classList.add('dup-peer');
+  });
+}
+
+function onPillHover(e: MouseEvent, entering: boolean): void {
+  const pill = (e.target as Element).closest<HTMLElement>('.dup-pill');
+  if (!pill) return;
+  if (!entering) {
+    if (!pill.contains(e.relatedTarget as Node | null)) setPeers(null);
+    return;
+  }
+  const row = rowOf(pill);
+  const info = row?.dataset.tabId ? dupByTab.get(Number(row.dataset.tabId)) : undefined;
+  if (info && info.cluster !== peerCluster) setPeers(info.cluster);
 }
 
 function onAuxClick(e: MouseEvent): void {
@@ -828,6 +940,15 @@ function clearSearch(): void {
   render();
 }
 
+function loadIgnoreParams(): void {
+  getSettings()
+    .then((st) => {
+      ignoreParams = parseIgnoreParams(st.duplicateIgnoreParams);
+      scheduleRender();
+    })
+    .catch(fail);
+}
+
 export function initTabsView(): void {
   treeEl = document.getElementById('tree') as HTMLElement;
   searchEl = document.getElementById('search') as HTMLInputElement;
@@ -839,6 +960,8 @@ export function initTabsView(): void {
     if (e.button === 1) e.preventDefault(); // suppress autoscroll
   });
   treeEl.addEventListener('contextmenu', onContextMenu);
+  treeEl.addEventListener('mouseover', (e) => onPillHover(e, true));
+  treeEl.addEventListener('mouseout', (e) => onPillHover(e, false));
   treeEl.addEventListener('dblclick', onDblClick);
   treeEl.addEventListener('keydown', onKeyDown);
   treeEl.addEventListener('dragstart', onDragStart);
@@ -894,7 +1017,9 @@ export function initTabsView(): void {
   for (const ev of events) ev.addListener(scheduleRender);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'session' && changes.manualTabs) scheduleRender();
+    if (area === 'local' && changes.settings) loadIgnoreParams();
   });
+  loadIgnoreParams();
 
   chrome.windows
     .getCurrent()
