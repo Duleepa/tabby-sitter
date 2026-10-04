@@ -1,7 +1,18 @@
 import { getRules, getActiveRules, matchesRule } from '../storage/rules';
 import { getSettings } from '../storage/config';
+import { retryTabMutation } from '../utils/tabs';
+import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate } from '../utils/url';
 
 console.log('[Background] Tabby Sitter started.');
+
+function enableSidePanelOnActionClick(): void {
+  chrome.sidePanel
+    .setPanelBehavior({ openPanelOnActionClick: true })
+    .catch((err) => console.warn('[Background] setPanelBehavior failed', err));
+}
+
+enableSidePanelOnActionClick();
+chrome.runtime.onInstalled.addListener(enableSidePanelOnActionClick);
 
 function parseDomains(raw: string): string[] {
   return raw
@@ -14,7 +25,62 @@ function hostnameMatchesDomain(hostname: string, domain: string): boolean {
   return hostname === domain || hostname.endsWith('.' + domain);
 }
 
-const DUPLICATE_SKIP_PREFIXES = ['chrome://', 'about:blank', 'about:newtab', 'edge://', 'brave://'];
+const FRESH_TAB_TTL_MS = 15000;
+const FRESH_TABS_KEY = 'freshTabs';
+
+// tabId -> creation time. In-memory mirror of chrome.storage.session so a
+// service worker restart doesn't lose track of fresh tabs.
+const freshTabs = new Map<number, number>();
+let freshTabsLoaded: Promise<void> | null = null;
+
+function loadFreshTabs(): Promise<void> {
+  freshTabsLoaded ??= (async () => {
+    try {
+      const result = await chrome.storage.session.get<{ freshTabs?: Record<string, number> }>(FRESH_TABS_KEY);
+      for (const [id, created] of Object.entries(result.freshTabs ?? {})) {
+        if (!freshTabs.has(Number(id))) freshTabs.set(Number(id), created);
+      }
+    } catch (err) {
+      console.warn('[Background] Failed to load fresh tabs', err);
+    }
+  })();
+  return freshTabsLoaded;
+}
+
+function persistFreshTabs(): void {
+  const now = Date.now();
+  for (const [id, created] of freshTabs) {
+    if (now - created > FRESH_TAB_TTL_MS) freshTabs.delete(id);
+  }
+  chrome.storage.session
+    .set({ [FRESH_TABS_KEY]: Object.fromEntries(freshTabs) })
+    .catch((err) => console.warn('[Background] Failed to persist fresh tabs', err));
+}
+
+async function markTabFresh(tabId: number): Promise<void> {
+  await loadFreshTabs();
+  freshTabs.set(tabId, Date.now());
+  persistFreshTabs();
+}
+
+async function forgetFreshTab(tabId: number): Promise<void> {
+  await loadFreshTabs();
+  if (freshTabs.delete(tabId)) persistFreshTabs();
+}
+
+/**
+ * Returns true exactly once per fresh tab: the first time it is evaluated
+ * with a real URL, provided it is within the TTL. The check and delete run
+ * synchronously after the load await, so concurrent callers cannot both win.
+ */
+async function consumeFreshTab(tabId: number): Promise<boolean> {
+  await loadFreshTabs();
+  const created = freshTabs.get(tabId);
+  if (created === undefined) return false;
+  freshTabs.delete(tabId);
+  persistFreshTabs();
+  return Date.now() - created <= FRESH_TAB_TTL_MS;
+}
 
 function waitForTabReady(tabId: number, timeoutMs = 8000): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -47,23 +113,35 @@ function waitForTabReady(tabId: number, timeoutMs = 8000): Promise<void> {
 }
 
 async function switchToExistingAndClose(existingTabId: number, newTabId: number): Promise<void> {
+  const existing = await chrome.tabs.get(existingTabId);
   await chrome.tabs.update(existingTabId, { active: true });
+  await chrome.windows.update(existing.windowId, { focused: true });
   await retryTabMutation(async () => {
     await chrome.tabs.remove(newTabId);
   });
 }
 
 async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
-  if (!tab.id || !tab.url || !tab.windowId) return false;
+  if (!tab.id || !isRealPageUrl(tab.url)) return false;
 
-  if (DUPLICATE_SKIP_PREFIXES.some((p) => tab.url!.startsWith(p))) return false;
+  // Only fresh tabs may be auto-closed; this also ensures one evaluation per tab.
+  if (!(await consumeFreshTab(tab.id))) return false;
 
   const settings = await getSettings();
 
   if (settings.duplicateTabMode === 'allow') return false;
 
-  const allTabs = await chrome.tabs.query({ windowId: tab.windowId });
-  const existingTab = allTabs.find((t) => t.id !== tab.id && t.url === tab.url);
+  const normalized = normalizeUrlForDuplicate(tab.url);
+  if (!normalized) return false;
+
+  const allTabs = await chrome.tabs.query({});
+  const existingTab = allTabs.find(
+    (t) =>
+      t.id !== tab.id &&
+      !t.pendingUrl &&
+      !!t.url &&
+      normalizeUrlForDuplicate(t.url) === normalized
+  );
   if (!existingTab || !existingTab.id) return false;
 
   if (settings.duplicateTabMode === 'prevent-specific') {
@@ -101,22 +179,7 @@ async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
 }
 
 
-async function retryTabMutation<T>(
-  fn: () => Promise<T>
-): Promise<T> {
-  try {
-    return await fn();
-  } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes('user may be dragging a tab') || msg.includes('cannot be edited right now')) {
-      await new Promise((r) => setTimeout(r, 300));
-      return await fn();
-    }
-    throw e;
-  }
-}
-
-async function findOrReserveGroupInWindow(
+async function findGroupInWindow(
   groupName: string,
   windowId: number
 ): Promise<number> {
@@ -154,7 +217,7 @@ async function processTab(tab: chrome.tabs.Tab): Promise<void> {
   if (matchedRule) {
     if (currentGroupTitle === matchedRule.groupName) return;
 
-    let groupId = await findOrReserveGroupInWindow(matchedRule.groupName, freshTab.windowId);
+    let groupId = await findGroupInWindow(matchedRule.groupName, freshTab.windowId);
     if (groupId === -1) {
       groupId = await retryTabMutation(() =>
         chrome.tabs.group({ tabIds: freshTab.id! })
@@ -204,7 +267,7 @@ export async function organizeAllTabs(): Promise<void> {
   const tabsToUngroup: number[] = [];
 
   for (const tab of tabs) {
-    if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+    if (!tab.id || !tab.url || isSkippableUrl(tab.url)) continue;
 
     const matchedRule = rules.find((r) => matchesRule(tab.url!, r)) ?? null;
     const currentGroupId = tab.groupId ?? -1;
@@ -266,7 +329,7 @@ async function sortUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
   const unmatched: { id: number; hostname: string }[] = [];
 
   for (const tab of tabs) {
-    if (!tab.id || !tab.url || tab.url.startsWith('chrome://')) continue;
+    if (!tab.id || !tab.url || isSkippableUrl(tab.url)) continue;
     if (tab.groupId !== -1) continue;
 
     try {
@@ -300,17 +363,27 @@ chrome.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
 });
 
 chrome.tabs.onCreated.addListener((tab) => {
-  if (!tab.id || !tab.url) return;
-  handleDuplicateTab(tab).then((handled) => {
-    if (handled) return;
-    setTimeout(() => {
-      processTab(tab).catch((err) =>
-        console.error('[Background] processTab failed on onCreated', err)
-      );
-    }, 100);
+  if (!tab.id) return;
+  const tabId = tab.id;
+  markTabFresh(tabId).then(() => {
+    // Link-opened tabs often have an empty url (only pendingUrl); the real URL
+    // is evaluated when it arrives via onUpdated.
+    if (!tab.url) return;
+    return handleDuplicateTab(tab).then((handled) => {
+      if (handled) return;
+      setTimeout(() => {
+        processTab(tab).catch((err) =>
+          console.error('[Background] processTab failed on onCreated', err)
+        );
+      }, 100);
+    });
   }).catch((err) =>
     console.error('[Background] handleDuplicateTab failed', err)
   );
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  forgetFreshTab(tabId).catch(() => {});
 });
 
 chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
@@ -324,7 +397,8 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
     return true;
   }
   if (request.action === 'switchToExisting') {
-    switchToExistingAndClose(request.existingTabId, request.newTabId)
+    const { existingTabId, newTabId } = request as { existingTabId: number; newTabId: number };
+    switchToExistingAndClose(existingTabId, newTabId)
       .catch((err) => {
         console.error('[Background] switchToExisting failed', err);
       });

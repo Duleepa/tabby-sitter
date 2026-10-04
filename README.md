@@ -21,7 +21,8 @@
 - **Color coding**: Choose from 9 group colors to visually distinguish your workflows.
 - **Persistent rules**: Your grouping rules are saved in Chrome storage and survive browser restarts.
 - **Config file sync**: Export/import rules as JSON for cross-machine sync (e.g. via Dropbox, iCloud, Obsidian vault). Starter config included.
-- **Tabbed popup UI**: Switch between Rules, Add, and Config tabs for easy management.
+- **Side panel tab manager**: A live tab tree with search, multi-select, drag & drop in/out of groups, a right-click menu (move to group, new group, pin, unload, close), inline group rename and color, and an all-windows view. Open it from the toolbar icon or `Ctrl/Cmd+Shift+Y`.
+- **Rules and Settings** live in the same panel.
 
 ## Installation (Developer Mode)
 
@@ -69,7 +70,7 @@
 
 Export your rules as a JSON file to sync across computers:
 
-1. Go to the **Config** tab in the popup.
+1. Open the side panel and go to the **Settings** tab.
 2. Click **Export Rules** to download `tabby-sitter.conf.json`.
 3. Save it in a synced folder (Dropbox, iCloud, etc.).
 4. On another machine, click **Import Rules** and select the file.

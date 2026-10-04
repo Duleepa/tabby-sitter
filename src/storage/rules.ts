@@ -1,5 +1,7 @@
 import { generateId } from '../utils/id';
 
+export type GroupColor = `${chrome.tabGroups.Color}`;
+
 export type MatchMode = 'contains' | 'regex';
 
 export interface GroupRule {
@@ -7,7 +9,7 @@ export interface GroupRule {
   patterns: string[];
   groupName: string;
   description?: string;
-  color?: chrome.tabGroups.ColorEnum;
+  color?: GroupColor;
   matchMode: MatchMode;
   enabled?: boolean;
 }
@@ -22,7 +24,7 @@ function invalidateCache(): void {
   cachedRules = null;
 }
 
-function parseRawRules(raw: any[]): GroupRule[] {
+export function parseRawRules(raw: any[]): GroupRule[] {
   return raw.map((r) => ({
     id: r.id || '',
     patterns: r.patterns || (r.pattern ? [r.pattern] : []),
@@ -30,6 +32,7 @@ function parseRawRules(raw: any[]): GroupRule[] {
     description: r.description,
     color: r.color,
     matchMode: r.matchMode || 'contains',
+    enabled: typeof r.enabled === 'boolean' ? r.enabled : undefined,
   }));
 }
 
@@ -44,7 +47,7 @@ function rulesAreDuplicate(a: GroupRule, b: Omit<GroupRule, 'id'>): boolean {
 export async function getRules(): Promise<GroupRule[]> {
   if (cachedRules !== null) return cachedRules;
 
-  const result = (await chrome.storage.local.get('rules')) as { rules?: any[] };
+  const result = await chrome.storage.local.get<{ rules?: any[] }>('rules');
   const raw = result.rules || [];
   cachedRules = parseRawRules(raw);
   return cachedRules;

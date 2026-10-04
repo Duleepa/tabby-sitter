@@ -1,4 +1,4 @@
-import { getRules, saveRules, type GroupRule } from './rules';
+import { getRules, saveRules, type GroupRule, type GroupColor } from './rules';
 import { generateId } from '../utils/id';
 
 export interface ConfigFile {
@@ -71,8 +71,9 @@ export async function importConfigFile(file: File, mode: 'replace' | 'merge' = '
           : [],
     groupName: (r.groupName || '') as string,
     description: r.description as string | undefined,
-    color: r.color as chrome.tabGroups.ColorEnum | undefined,
+    color: r.color as GroupColor | undefined,
     matchMode: VALID_MATCH_MODES.has(String(r.matchMode)) ? (r.matchMode as 'contains' | 'regex') : 'contains',
+    enabled: typeof r.enabled === 'boolean' ? r.enabled : undefined,
   }));
 
   if (rules.some((r) => r.patterns.length === 0)) {
