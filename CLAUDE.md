@@ -15,7 +15,11 @@ It auto-organizes browser tabs into tab groups based on user-defined URL pattern
 
 ## Permissions
 
-`tabs`, `tabGroups`, `storage`, `sidePanel` (side panel). No host permissions, no content scripts, no `scripting`: duplicate notices live in the side panel. The toolbar action opens the side panel (`setPanelBehavior({ openPanelOnActionClick: true })` in the background); there is no popup. Commands: `organize-tabs` (`Ctrl/Cmd+Shift+O`), `_execute_action` (`Ctrl/Cmd+Shift+Y`). Favicons use `tab.favIconUrl` (http/https/data only); the `favicon` permission is not used.
+`tabs`, `tabGroups`, `storage`, `sidePanel` (side panel), `alarms` (auto-unload timer; no install warning). No host permissions, no content scripts, no `scripting`: duplicate notices live in the side panel. The toolbar action opens the side panel (`setPanelBehavior({ openPanelOnActionClick: true })` in the background); there is no popup. Commands: `organize-tabs` (`Ctrl/Cmd+Shift+O`), `_execute_action` (`Ctrl/Cmd+Shift+Y`). Favicons use `tab.favIconUrl` (http/https/data only); the `favicon` permission is not used.
+
+## Workspaces & memory
+
+Saved groups restore through the background (`restoreSavedGroup`) inside a quiet window; restored tabs are also marked manual and allowed as duplicates. An alarm `auto-discard` (every 5 min) unloads idle tabs via `pickTabsToDiscard`; it is reconciled idempotently at SW start, install, startup and every settings change. Group menu actions: Save group, Save & close, Unload group, Sort tabs by site, Merge groups named "X" here (reuses `applyDrop` with a group "into" target).
 
 ## Duplicate handling
 
@@ -24,6 +28,9 @@ Order in `handleDuplicateTab`: fresh vs non-fresh (consumed once) -> startup gra
 ## Manual overrides
 
 Tabs the user places by hand (side panel drag/drop and group menu actions, or a group change in the tab strip that the extension did not cause) are stored as overrides. `processTab` and `organizeAllTabs` skip them. Background code must call `groupTabs()`/`ungroupTabs()` (which record the tab ids in `ExpectedGroupChanges` first) instead of `chrome.tabs.group/ungroup` directly, otherwise its own changes would be mistaken for manual moves. Group changes within 1.5 s of tab creation are ignored (Chrome puts link-opened tabs into the opener's group natively). "Let rules manage" clears the override. Setting `keepOpenedTabsInGroup` (default on) stops unmatched tabs opened from a group tab from being ungrouped.
+
+### Local storage keys (`chrome.storage.local`)
+- `rules`, `settings` (incl. `autoDiscardMinutes`, `autoDiscardPinned`, `autoDiscardExceptDomains`), `savedGroups` (`SavedGroup[]`: title, colour, tab URLs/titles; no favicons)
 
 ### Session storage keys (`chrome.storage.session`)
 - `freshTabs`: tabId → creation time, consumed on first real-URL evaluation (duplicate handling)
@@ -37,6 +44,8 @@ Tabs the user places by hand (side panel drag/drop and group menu actions, or a 
 - `{ action: 'organizeAllTabs', windowId?, allWindows? }`
 - `{ action: 'processTabs', tabIds }`: re-run rules for those tabs now
 - `{ action: 'duplicateNotice', id, choice: 'switch' | 'keep' | 'undo' | 'dismiss' }`
+- `{ action: 'restoreSavedGroup', id, newWindow?, windowId? }`: recreate a saved group (inactive tabs, saved order, saved title/colour, marked manual)
+- `{ action: 'openSavedTab', url, windowId? }`: open one saved tab without tripping duplicate logic
 - `{ action: 'closeDuplicates', keys? }`: close all duplicates except `pickKeeper` per cluster (never pinned tabs)
 
 ## Architecture
@@ -69,6 +78,11 @@ src/
 | `src/storage/overrides.ts` | Manual overrides (`getOverrides`, `isOverridden`, `addOverrides`, `clearOverrides`) in `chrome.storage.session`; per-call read-modify-write, cache invalidated by `storage.onChanged`. |
 | `src/utils/url.ts` | Shared skip-prefix list, `isRealPageUrl`, `normalizeUrlForDuplicate(url, extraIgnoredParams)` (drops fragment, `www.`, tracking params, sorts params), `parseIgnoreParams`. |
 | `src/utils/duplicates.ts` | Pure: `findDuplicateClusters`, `pickKeeper`, `tabsToClose`, `duplicateCount`, `pickExistingTab`. Shared by background (badge, closeDuplicates) and panel (chip, Duplicates view) so counts agree. |
+| `src/storage/saved-groups.ts` | Saved groups CRUD plus pure `isSavableUrl` / `snapshotFromTabs`. |
+| `src/sidepanel/saved-view.ts` | Saved tab: cards, expand, Restore / New window / Rename / Delete with Undo. Saved titles are page-controlled: `textContent` only. |
+| `src/sidepanel/sort.ts` | Pure `planSortMoves` (selection-insertion sort by site) and `compareBySite`. |
+| `src/utils/discard.ts` | Pure `pickTabsToDiscard` for auto-unload. |
+| `src/background/quiet-window.ts` | `QuietWindows`: while the extension restores a saved group, tabs it creates (judged by their `createdAt`) skip fresh-marking, duplicate and rule handling. The window opens before the first `tabs.create` and closes 500 ms after grouping. |
 | `src/utils/notices.ts` | Pure notice-list helpers (`pruneNotices`, `addNoticeTo`, `removeFlaggedForTab`). |
 | `src/storage/duplicates.ts` | Session storage for notices and allowed duplicate tabs (background is the only writer, serialised). |
 | `src/background/allow-once.ts` | `AllowOnce`: URLs reopened by Undo are not treated as duplicates for 10 s. |

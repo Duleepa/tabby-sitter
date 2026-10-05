@@ -25,7 +25,10 @@
 - **Respects manual moves**: Tabs you drag in or out of groups (in the panel or the tab strip) are left alone by the rules until you choose "Let rules manage" from the tab menu. Tabs opened from a grouped tab stay in that group unless a rule says otherwise.
 - **Domain match mode**: Match by hostname (`github.com` also matches `gist.github.com`, never `notgithub.com`). "Always group this site here" in the tab menu creates or extends a domain rule.
 - **Smart duplicate handling**: Optionally stop the same page being open twice, across all windows. Tracking parameters (`utm_*`, `fbclid`, ...) and `#fragments` are ignored, and you can add more. A new duplicate tab is closed and switches to the existing one, with an Undo; a tab you navigate to a duplicate is never closed, only flagged ("Switch & close this" / "Keep both"). A Duplicates view lists clusters with "Keep this one" and "Close all duplicates", and the toolbar icon shows the count.
-- **Minimal permissions**: `tabs`, `tabGroups`, `storage`, `sidePanel`. No host access, no content scripts.
+- **Saved groups**: Save a group (or a tab selection) from the menu, optionally closing it, and restore it later in this or a new window with its title, colour and tab order. Restored tabs are never auto-closed or regrouped by rules.
+- **Auto-unload**: Optionally unload tabs idle for 15 minutes to 4 hours to free memory (never the active, audible or, by default, pinned tabs; per-domain exceptions).
+- **Tidy**: Sort a group's tabs by site, unload a whole group, or merge same-named groups across windows.
+- **Minimal permissions**: `tabs`, `tabGroups`, `storage`, `sidePanel`, `alarms`. No host access, no content scripts.
 - **Organize**: Applies rules to the panel's window; Shift-click organizes all windows.
 - **Rules and Settings** live in the same panel.
 

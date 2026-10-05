@@ -4,7 +4,14 @@ import { addOverrides, clearOverrides, getOverrides } from '../storage/overrides
 import { decideTabAction, type TabAction } from './decide';
 import { ExpectedGroupChanges } from './expected-changes';
 import { retryTabMutation } from '../utils/tabs';
-import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate, parseIgnoreParams } from '../utils/url';
+import {
+  hostnameMatchesDomain,
+  isRealPageUrl,
+  isSkippableUrl,
+  normalizeUrlForDuplicate,
+  parseDomains,
+  parseIgnoreParams,
+} from '../utils/url';
 import { duplicateCount, findDuplicateClusters, pickExistingTab, tabsToClose } from '../utils/duplicates';
 import {
   addNotice,
@@ -16,6 +23,9 @@ import {
   removeNotice,
 } from '../storage/duplicates';
 import { AllowOnce } from './allow-once';
+import { QuietWindows } from './quiet-window';
+import { listSavedGroups } from '../storage/saved-groups';
+import { pickTabsToDiscard } from '../utils/discard';
 import { generateId } from '../utils/id';
 
 console.log('[Background] Tabby Sitter started.');
@@ -28,17 +38,6 @@ function enableSidePanelOnActionClick(): void {
 
 enableSidePanelOnActionClick();
 chrome.runtime.onInstalled.addListener(enableSidePanelOnActionClick);
-
-function parseDomains(raw: string): string[] {
-  return raw
-    .split(',')
-    .map((d) => d.trim().toLowerCase())
-    .filter((d) => d.length > 0);
-}
-
-function hostnameMatchesDomain(hostname: string, domain: string): boolean {
-  return hostname === domain || hostname.endsWith('.' + domain);
-}
 
 const FRESH_TAB_TTL_MS = 15000;
 const FRESH_TABS_KEY = 'freshTabs';
@@ -135,6 +134,16 @@ async function recordCreated(tabId: number): Promise<void> {
   persistCreated();
 }
 
+// Saved-group restores in progress (in memory; the SW stays alive while a restore runs).
+const quietWindows = new QuietWindows();
+
+/** Created inside a quiet window: the extension itself opened this tab. */
+async function isQuietTab(tabId: number): Promise<boolean> {
+  await loadCreated();
+  const t = createdAt.get(tabId);
+  return t !== undefined && quietWindows.isQuiet(t);
+}
+
 async function wasJustCreated(tabId: number): Promise<boolean> {
   await loadCreated();
   const t = createdAt.get(tabId);
@@ -225,6 +234,7 @@ async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
   if (!tab.id || !isRealPageUrl(tab.url)) return false;
   const tabId = tab.id;
   const url = tab.url;
+  if (await isQuietTab(tabId)) return false;
 
   const fresh = await consumeFreshTab(tabId);
   if (await inStartupGrace()) return false;
@@ -323,6 +333,106 @@ async function closeDuplicates(keys?: string[]): Promise<void> {
   if (ids.length > 0) await retryTabMutation(() => chrome.tabs.remove(ids));
 }
 
+const RESTORE_QUIET_GRACE_MS = 500;
+
+async function restoreSavedGroup(id: string, newWindow: boolean, windowId?: number): Promise<void> {
+  const group = (await listSavedGroups()).find((g) => g.id === id);
+  if (!group || group.tabs.length === 0) throw new Error('Saved group not found or empty');
+
+  const quiet = quietWindows.open(Date.now());
+  const created: number[] = [];
+  let failure: unknown;
+  try {
+    let targetWindow = windowId;
+    let rest = group.tabs;
+    if (newWindow) {
+      const win = await chrome.windows.create({ url: group.tabs[0].url, focused: true });
+      targetWindow = win.id;
+      const first = win.tabs?.[0]?.id;
+      if (first !== undefined) created.push(first);
+      rest = group.tabs.slice(1);
+    } else if (targetWindow === undefined) {
+      targetWindow = (await chrome.windows.getLastFocused()).id;
+    }
+    // Inactive tabs, created in saved order so the strip order is preserved.
+    for (const t of rest) {
+      const tab = await chrome.tabs.create({ windowId: targetWindow, url: t.url, active: false });
+      if (tab.id !== undefined) created.push(tab.id);
+    }
+  } catch (err) {
+    failure = err;
+  }
+
+  try {
+    if (created.length > 0) {
+      await addOverrides(created);
+      const extra = parseIgnoreParams((await getSettings()).duplicateIgnoreParams);
+      for (let i = 0; i < created.length; i++) {
+        const normalized = normalizeUrlForDuplicate(group.tabs[i]?.url ?? '', extra);
+        if (normalized) await allowDuplicateTab(created[i], normalized);
+      }
+      const groupId = await groupTabs({ tabIds: created });
+      await chrome.tabGroups.update(groupId, { title: group.title, color: group.color });
+    }
+  } finally {
+    quietWindows.close(quiet, Date.now() + RESTORE_QUIET_GRACE_MS);
+    setTimeout(() => quietWindows.prune(Date.now()), 5000);
+  }
+  if (failure) throw failure instanceof Error ? failure : new Error('Restore failed');
+}
+
+async function openSavedTab(url: string, windowId?: number): Promise<void> {
+  const quiet = quietWindows.open(Date.now());
+  try {
+    const tab = await chrome.tabs.create({ url, windowId });
+    const normalized = normalizeUrlForDuplicate(url, parseIgnoreParams((await getSettings()).duplicateIgnoreParams));
+    if (tab.id !== undefined && normalized) await allowDuplicateTab(tab.id, normalized);
+  } finally {
+    quietWindows.close(quiet, Date.now() + RESTORE_QUIET_GRACE_MS);
+  }
+}
+
+const DISCARD_ALARM = 'auto-discard';
+
+/** Idempotent: create the alarm when auto-unload is on, clear it when off. */
+async function reconcileDiscardAlarm(): Promise<void> {
+  const { autoDiscardMinutes } = await getSettings();
+  const existing = await chrome.alarms.get(DISCARD_ALARM);
+  if (autoDiscardMinutes > 0) {
+    if (!existing) await chrome.alarms.create(DISCARD_ALARM, { delayInMinutes: 5, periodInMinutes: 5 });
+  } else if (existing) {
+    await chrome.alarms.clear(DISCARD_ALARM);
+  }
+}
+
+async function runAutoDiscard(): Promise<void> {
+  const settings = await getSettings();
+  const picked = pickTabsToDiscard(await chrome.tabs.query({}), settings, Date.now());
+  let count = 0;
+  for (const tab of picked) {
+    try {
+      await chrome.tabs.discard(tab.id as number);
+      count++;
+    } catch {
+      /* tab closed or not discardable */
+    }
+  }
+  if (count > 0) console.log(`[Background] Auto-unloaded ${count} idle tab(s)`);
+}
+
+function reconcileDiscardAlarmSafe(): void {
+  reconcileDiscardAlarm().catch((err) => console.warn('[Background] alarm reconcile failed', err));
+}
+
+reconcileDiscardAlarmSafe();
+chrome.runtime.onInstalled.addListener(reconcileDiscardAlarmSafe);
+chrome.runtime.onStartup.addListener(reconcileDiscardAlarmSafe);
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === DISCARD_ALARM) {
+    runAutoDiscard().catch((err) => console.warn('[Background] auto-discard failed', err));
+  }
+});
+
 let badgeTimer: ReturnType<typeof setTimeout> | undefined;
 
 function scheduleBadgeUpdate(): void {
@@ -348,7 +458,10 @@ async function updateBadge(): Promise<void> {
 scheduleBadgeUpdate();
 chrome.runtime.onInstalled.addListener(scheduleBadgeUpdate);
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === 'local' && changes.settings) scheduleBadgeUpdate();
+  if (area === 'local' && changes.settings) {
+    scheduleBadgeUpdate();
+    reconcileDiscardAlarmSafe();
+  }
 });
 
 
@@ -380,6 +493,7 @@ async function processTab(tab: Pick<chrome.tabs.Tab, 'id'>): Promise<void> {
   }
   const tabId = freshTab.id;
   if (tabId === undefined || !freshTab.url) return;
+  if (await isQuietTab(tabId)) return;
 
   const [allRules, settings, overrides] = await Promise.all([getRules(), getSettings(), getOverrides()]);
   const currentGroupId = freshTab.groupId ?? -1;
@@ -558,23 +672,25 @@ chrome.tabs.onCreated.addListener((tab) => {
   if (!tab.id) return;
   const tabId = tab.id;
   scheduleBadgeUpdate();
-  recordCreated(tabId).catch(() => {});
-  // Tabs created during browser startup are session restores: never fresh.
-  inStartupGrace().then((grace) => (grace ? undefined : markTabFresh(tabId))).then(() => {
-    // Link-opened tabs often have an empty url (only pendingUrl); the real URL
-    // is evaluated when it arrives via onUpdated.
-    if (!tab.url) return;
-    return handleDuplicateTab(tab).then((handled) => {
+  recordCreated(tabId)
+    .catch(() => {})
+    .then(async () => {
+      // Tabs created during browser startup (session restore) or by a saved-group
+      // restore are never fresh and skip duplicate/rule handling.
+      const quiet = await isQuietTab(tabId);
+      if (!quiet && !(await inStartupGrace())) await markTabFresh(tabId);
+      // Link-opened tabs often have an empty url (only pendingUrl); the real URL
+      // is evaluated when it arrives via onUpdated.
+      if (quiet || !tab.url) return;
+      const handled = await handleDuplicateTab(tab);
       if (handled) return;
       setTimeout(() => {
         processTab(tab).catch((err) =>
           console.error('[Background] processTab failed on onCreated', err)
         );
       }, 100);
-    });
-  }).catch((err) =>
-    console.error('[Background] handleDuplicateTab failed', err)
-  );
+    })
+    .catch((err) => console.error('[Background] onCreated handling failed', err));
 });
 
 chrome.tabs.onReplaced.addListener(scheduleBadgeUpdate);
@@ -617,6 +733,23 @@ chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === 'duplicateNotice') {
     const { id, choice } = request as { id: string; choice: string };
     handleDuplicateNotice(id, choice)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => sendResponse({ success: false, error: String(err) }));
+    return true;
+  }
+  if (request.action === 'restoreSavedGroup') {
+    const { id, newWindow, windowId } = request as { id: string; newWindow?: boolean; windowId?: number };
+    restoreSavedGroup(id, !!newWindow, windowId)
+      .then(() => sendResponse({ success: true }))
+      .catch((err) => {
+        console.error('[Background] restoreSavedGroup failed', err);
+        sendResponse({ success: false, error: err instanceof Error ? err.message : String(err) });
+      });
+    return true;
+  }
+  if (request.action === 'openSavedTab') {
+    const { url, windowId } = request as { url: string; windowId?: number };
+    openSavedTab(url, windowId)
       .then(() => sendResponse({ success: true }))
       .catch((err) => sendResponse({ success: false, error: String(err) }));
     return true;

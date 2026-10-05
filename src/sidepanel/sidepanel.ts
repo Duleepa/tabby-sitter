@@ -1,4 +1,5 @@
 import { showStatus } from './dom';
+import { initSavedView } from './saved-view';
 import { initRulesView } from './rules-view';
 import { initSettingsView } from './settings-view';
 import { initDuplicatesView } from './duplicates-view';
@@ -61,5 +62,6 @@ function initHeader() {
 initHeader();
 initTabsView();
 initDuplicatesView();
+initSavedView();
 initRulesView().catch((err) => showStatus('Failed to load rules: ' + String(err)));
 initSettingsView().catch((err) => showStatus('Failed to load settings: ' + String(err)));
