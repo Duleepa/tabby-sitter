@@ -1012,3 +1012,140 @@ footer .sep {
   background: var(--amber-solid);
   box-shadow: 0 0 0 1.5px var(--bg);
 }
+
+/* Saved groups */
+.saved-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px 6px;
+  margin-bottom: 8px;
+}
+.saved-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: left;
+}
+.saved-toggle:hover {
+  transform: none;
+  box-shadow: none;
+}
+.saved-toggle .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--gc);
+  flex-shrink: 0;
+}
+.saved-toggle .chevron {
+  width: 14px;
+  text-align: center;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.saved-toggle .chevron.collapsed {
+  transform: rotate(-90deg);
+}
+.saved-toggle .count,
+.saved-date {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+.saved-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-head .rename-input,
+.saved-card .rename-input {
+  margin: 0;
+  padding: 1px 4px;
+  height: 22px;
+  font-size: 0.8rem;
+}
+.saved-actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.saved-tabs {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 4px;
+}
+.saved-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 26px;
+  padding: 0 4px;
+  background: transparent;
+  color: var(--text);
+  box-shadow: none;
+  font-size: 0.75rem;
+  font-weight: 400;
+  text-align: left;
+  border-radius: 6px;
+}
+.saved-tab:hover {
+  transform: none;
+  box-shadow: none;
+  background: var(--hover);
+}
+.saved-tab .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.saved-tab .host {
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+.toast:empty {
+  display: none;
+}
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: var(--primary-light);
+  font-size: 0.78rem;
+}
+.toast-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.toast-btn {
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+  box-shadow: none;
+}

@@ -21,6 +21,7 @@
 
     <nav class="tabs" role="tablist" aria-label="Sections">
       <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="tabsPanel" data-tab="tabs">Tabs</button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="savedPanel" data-tab="saved">Saved</button>
       <button class="tab-btn" role="tab" aria-selected="false" aria-controls="rulesPanel" data-tab="rules">Rules</button>
       <button class="tab-btn" role="tab" aria-selected="false" aria-controls="settingsPanel" data-tab="settings">Settings</button>
     </nav>
@@ -37,6 +38,11 @@
       </div>
       <div id="tree" role="tree" aria-label="Open tabs" aria-multiselectable="true"></div>
       <div id="dupView" class="dup-view hidden" aria-label="Duplicate tabs"></div>
+    </section>
+
+    <section class="tab-panel scroll hidden" id="savedPanel" role="tabpanel">
+      <div id="savedToast" class="toast" role="status" aria-live="polite"></div>
+      <div id="savedList"></div>
     </section>
 
     <section class="tab-panel scroll hidden" id="rulesPanel" role="tabpanel">
@@ -159,6 +165,28 @@ or regex patterns if using Regex mode"></textarea>
         </div>
         <p class="hint">
           Keep tabs opened from a group in that group when no rule matches them. Rules for a different group still win.
+        </p>
+      </article>
+
+      <article class="card">
+        <h2>Memory</h2>
+        <label for="autoDiscardMinutes">Unload tabs idle for</label>
+        <select id="autoDiscardMinutes">
+          <option value="0">Off</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">1 hour</option>
+          <option value="120">2 hours</option>
+          <option value="240">4 hours</option>
+        </select>
+        <div class="card-header-row">
+          <label class="toggle-label" for="autoDiscardPinned">Also unload pinned tabs</label>
+          <input type="checkbox" class="rule-toggle" id="autoDiscardPinned" />
+        </div>
+        <label for="autoDiscardExceptDomains">Never unload these domains (comma-separated)</label>
+        <input type="text" id="autoDiscardExceptDomains" placeholder="mail.google.com, slack.com" />
+        <p class="hint">
+          Unloaded tabs stay in your tab strip and reload when you click them. Unsaved form input in an unloaded tab may be lost. Active, playing-audio and pinned tabs are never unloaded unless you allow pinned tabs.
         </p>
       </article>
 

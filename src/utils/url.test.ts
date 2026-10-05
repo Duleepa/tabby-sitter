@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate, parseIgnoreParams } from './url';
+import { hostnameMatchesDomain, parseDomains, isRealPageUrl, isSkippableUrl, normalizeUrlForDuplicate, parseIgnoreParams } from './url';
 
 describe('normalizeUrlForDuplicate', () => {
   it('strips the fragment', () => {
@@ -59,5 +59,16 @@ describe('parseIgnoreParams', () => {
   it('splits, trims and lowercases', () => {
     expect(parseIgnoreParams(' Foo, bar ,,BAZ ')).toEqual(['foo', 'bar', 'baz']);
     expect(parseIgnoreParams('')).toEqual([]);
+  });
+});
+
+describe('domain helpers', () => {
+  it('parses domain lists', () => {
+    expect(parseDomains(' A.com, ,b.org ')).toEqual(['a.com', 'b.org']);
+  });
+  it('matches host and subdomains only', () => {
+    expect(hostnameMatchesDomain('gist.github.com', 'github.com')).toBe(true);
+    expect(hostnameMatchesDomain('github.com', 'github.com')).toBe(true);
+    expect(hostnameMatchesDomain('notgithub.com', 'github.com')).toBe(false);
   });
 });

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeDrop, computeGroupMove, planMoves, type DropTab, type DropTarget, type TabMove } from './drop';
+import { simulateMoves } from '../test/simulate';
+import { computeDrop, computeGroupMove, planMoves, type DropTab, type DropTarget } from './drop';
 
 // Window 1: [A0 B1 C2 | G10: D3 E4 | F5 G6]
 function tabs(over: Record<number, Partial<DropTab>> = {}): DropTab[] {
@@ -173,23 +174,6 @@ describe('computeGroupMove', () => {
     expect(computeGroupMove(tabs(), 10, { kind: 'end', windowId: 1 })?.index).toBe(5);
   });
 });
-
-/** chrome.tabs.move single-tab semantics: remove the tab, insert at its final index (clamped). */
-function simulateMoves(allTabs: DropTab[], moves: TabMove[]): Record<number, number[]> {
-  const wins: Record<number, number[]> = {};
-  for (const t of [...allTabs].sort((a, b) => a.windowId - b.windowId || a.index - b.index)) {
-    (wins[t.windowId] ??= []).push(t.id);
-  }
-  for (const m of moves) {
-    for (const list of Object.values(wins)) {
-      const at = list.indexOf(m.tabId);
-      if (at !== -1) list.splice(at, 1);
-    }
-    const dest = (wins[m.windowId] ??= []);
-    dest.splice(Math.min(m.index, dest.length), 0, m.tabId);
-  }
-  return wins;
-}
 
 function finalOrder(all: DropTab[], dragged: number[], target: DropTarget): Record<number, number[]> {
   const plan = computeDrop(all, dragged, target);

@@ -77,6 +77,28 @@ export async function initSettingsView() {
     await saveSettings(current);
   });
 
+  const discardMinutes = $('autoDiscardMinutes') as HTMLSelectElement;
+  const discardPinned = $('autoDiscardPinned') as HTMLInputElement;
+  const discardExcept = $('autoDiscardExceptDomains') as HTMLInputElement;
+  discardMinutes.value = String(settings.autoDiscardMinutes);
+  discardPinned.checked = settings.autoDiscardPinned;
+  discardExcept.value = settings.autoDiscardExceptDomains;
+  discardMinutes.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.autoDiscardMinutes = Number(discardMinutes.value);
+    await saveSettings(current);
+  });
+  discardPinned.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.autoDiscardPinned = discardPinned.checked;
+    await saveSettings(current);
+  });
+  discardExcept.addEventListener('change', async () => {
+    const current = await getSettings();
+    current.autoDiscardExceptDomains = discardExcept.value.trim();
+    await saveSettings(current);
+  });
+
   const keepToggle = $('keepOpenedTabsInGroup') as HTMLInputElement;
   keepToggle.checked = settings.keepOpenedTabsInGroup;
   keepToggle.addEventListener('change', async () => {

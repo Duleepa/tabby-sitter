@@ -15,11 +15,15 @@ import {
   toDropTabs,
   alwaysGroupSite,
   letRulesManage,
+  mergeSameNamedGroups,
+  sameNamedGroups,
+  sortGroupBySite,
   siteHost,
   ungroupGroup,
   updateGroup,
 } from './tab-actions';
 import { getOverrides } from '../storage/overrides';
+import type { GroupColor } from '../storage/rules';
 import { getSettings } from '../storage/config';
 import {
   findDuplicateClusters,
@@ -28,6 +32,8 @@ import {
   type DuplicateCluster,
 } from '../utils/duplicates';
 import { parseIgnoreParams } from '../utils/url';
+import { listSavedGroups, replaceSavedGroup, saveGroup, snapshotFromTabs } from '../storage/saved-groups';
+import { generateId } from '../utils/id';
 import { buildWindowTree, filterTree, GROUP_COLORS, type WindowTree } from './tab-tree';
 
 interface RowRef {
@@ -450,16 +456,74 @@ function startRename(groupId: number): void {
 
 // ---------- menus ----------
 
+/** Save tabs as a named snapshot; asks inline (Replace / Save as new) when the name already exists. */
+async function saveSnapshot(
+  title: string,
+  color: GroupColor,
+  tabs: chrome.tabs.Tab[],
+  x: number,
+  y: number,
+  afterSave?: () => void
+): Promise<void> {
+  const name = title.trim() || 'Untitled group';
+  const snapshot = snapshotFromTabs(name, color, tabs, Date.now(), generateId());
+  if (snapshot.tabs.length === 0) {
+    showStatus('Nothing restorable to save');
+    return;
+  }
+  const commit = async (replaceId?: string) => {
+    if (replaceId) await replaceSavedGroup(replaceId, snapshot);
+    else await saveGroup(snapshot);
+    showStatus(`Saved “${name}” (${snapshot.tabs.length} tab${snapshot.tabs.length === 1 ? '' : 's'})`);
+    afterSave?.();
+  };
+  const existing = (await listSavedGroups()).find((g) => g.title.trim().toLowerCase() === name.toLowerCase());
+  if (!existing) {
+    await commit();
+    return;
+  }
+  openMenu(x, y, [
+    { type: 'item', label: `Replace saved “${name}”`, onSelect: () => run(commit(existing.id)) },
+    { type: 'item', label: 'Save as new', onSelect: () => run(commit()) },
+  ]);
+}
+
+function groupTabsInOrder(groupId: number): chrome.tabs.Tab[] {
+  return state.tabs.filter((t) => t.groupId === groupId).sort((a, b) => a.index - b.index);
+}
+
 function openGroupMenu(groupId: number, x: number, y: number): void {
   const group = groupById(groupId);
   if (!group) return;
-  openMenu(x, y, [
-    { type: 'swatches', current: group.color, onPick: (color) => run(updateGroup(groupId, { color })) },
+  const title = group.title ?? '';
+  const color = group.color;
+  const items: MenuItem[] = [
+    { type: 'swatches', current: group.color, onPick: (c) => run(updateGroup(groupId, { color: c })) },
     { type: 'separator' },
     { type: 'item', label: 'Rename', onSelect: () => setTimeout(() => startRename(groupId), 0) },
+    { type: 'item', label: 'Save group', onSelect: () => run(saveSnapshot(title, color, groupTabsInOrder(groupId), x, y)) },
+    {
+      type: 'item',
+      label: 'Save & close group',
+      onSelect: () =>
+        run(saveSnapshot(title, color, groupTabsInOrder(groupId), x, y, () => run(closeGroup(groupId)))),
+    },
+    { type: 'item', label: 'Unload group', onSelect: () => run(discardTabs(groupTabsInOrder(groupId))) },
+    { type: 'item', label: 'Sort tabs by site', onSelect: () => run(sortGroupBySite(groupId)) },
+  ];
+  if (sameNamedGroups(state.groups, groupId).length > 0) {
+    items.push({
+      type: 'item',
+      label: `Merge groups named “${title}” here`,
+      onSelect: () => run(mergeSameNamedGroups(groupId)),
+    });
+  }
+  items.push(
+    { type: 'separator' },
     { type: 'item', label: 'Ungroup all', onSelect: () => run(ungroupGroup(groupId)) },
-    { type: 'item', label: 'Close group', danger: true, onSelect: () => run(closeGroup(groupId)) },
-  ]);
+    { type: 'item', label: 'Close group', danger: true, onSelect: () => run(closeGroup(groupId)) }
+  );
+  openMenu(x, y, items);
 }
 
 function reportAlwaysGroup(
@@ -533,6 +597,14 @@ function openTabMenu(tabId: number, x: number, y: number): void {
       label: 'Close other copies',
       disabled: copies.length === 0,
       onSelect: () => run(closeTabs(copies.flatMap((t) => (t.id === undefined ? [] : [t.id])))),
+    });
+  }
+  if (state.selection.size > 0 && state.selection.has(tabId)) {
+    items.push({
+      type: 'input',
+      label: 'Save selection as group…',
+      placeholder: 'Group name, then Enter',
+      onSubmit: (name) => run(saveSnapshot(name, 'blue', tabs, x, y)),
     });
   }
   items.push(...siteRuleItems(tabById(tabId)));

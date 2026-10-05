@@ -173,6 +173,9 @@ export interface ExtensionSettings {
   keepOpenedTabsInGroup: boolean;
   duplicateBadge: boolean;
   duplicateIgnoreParams: string;
+  autoDiscardMinutes: number;
+  autoDiscardPinned: boolean;
+  autoDiscardExceptDomains: string;
 }
 
 const DEFAULT_SETTINGS: ExtensionSettings = {
@@ -183,6 +186,9 @@ const DEFAULT_SETTINGS: ExtensionSettings = {
   keepOpenedTabsInGroup: true,
   duplicateBadge: true,
   duplicateIgnoreParams: '',
+  autoDiscardMinutes: 0,
+  autoDiscardPinned: false,
+  autoDiscardExceptDomains: '',
 };
 
 export async function getSettings(): Promise<ExtensionSettings> {

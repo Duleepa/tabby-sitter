@@ -58,3 +58,16 @@ export function normalizeUrlForDuplicate(url: string, extraIgnoredParams: string
     return null;
   }
 }
+
+/** Parse a comma-separated domain list into lowercase entries. */
+export function parseDomains(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d.length > 0);
+}
+
+/** Hostname equals the domain or is a subdomain of it. */
+export function hostnameMatchesDomain(hostname: string, domain: string): boolean {
+  return hostname === domain || hostname.endsWith('.' + domain);
+}

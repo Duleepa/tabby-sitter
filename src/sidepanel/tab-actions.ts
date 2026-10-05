@@ -1,6 +1,7 @@
 import { retryTabMutation } from '../utils/tabs';
 import { computeDrop, computeGroupMove, planMoves, type DropTab, type DropTarget } from './drop';
 import { nextUnusedColor } from './tab-tree';
+import { planSortMoves } from './sort';
 import { addOverrides, clearOverrides } from '../storage/overrides';
 import { addDomainRule, type DomainRuleOutcome, type GroupColor } from '../storage/rules';
 
@@ -183,4 +184,31 @@ export async function alwaysGroupSite(
   const outcome = await addDomainRule(host, groupTitle, color);
   await letRulesManage([tab.id]);
   return { ...outcome, host, groupTitle };
+}
+
+/** Sort the tabs of a group by site (hostname, then title) in place. */
+export async function sortGroupBySite(groupId: number): Promise<void> {
+  const tabs = (await chrome.tabs.query({ groupId })).sort((a, b) => a.index - b.index);
+  const moves = planSortMoves(
+    tabs.flatMap((t) => (t.id === undefined ? [] : [{ id: t.id, index: t.index, windowId: t.windowId, url: t.url, title: t.title }]))
+  );
+  for (const m of moves) {
+    await retryTabMutation(() => chrome.tabs.move(m.tabId, { windowId: m.windowId, index: m.index }));
+  }
+}
+
+/** Other groups sharing this group's (non-empty) title, in any normal window. */
+export function sameNamedGroups(groups: chrome.tabGroups.TabGroup[], groupId: number): chrome.tabGroups.TabGroup[] {
+  const self = groups.find((g) => g.id === groupId);
+  if (!self?.title) return [];
+  return groups.filter((g) => g.id !== groupId && g.title === self.title);
+}
+
+/** Move all tabs of same-named groups into this group (append, cross-window), marking them manual. */
+export async function mergeSameNamedGroups(groupId: number): Promise<void> {
+  const others = new Set(sameNamedGroups(await chrome.tabGroups.query({}), groupId).map((g) => g.id));
+  if (others.size === 0) return;
+  const tabs = await chrome.tabs.query({ windowType: 'normal' });
+  const ids = tabs.filter((t) => others.has(t.groupId)).flatMap((t) => (t.id === undefined ? [] : [t.id]));
+  if (ids.length > 0) await applyDrop(ids, { kind: 'group', groupId, position: 'into' });
 }
