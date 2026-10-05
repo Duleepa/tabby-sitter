@@ -23,9 +23,6 @@ function setActiveTab(tabName: string) {
   });
 }
 
-const ORGANIZE_IDLE = 'Organize';
-const ORGANIZE_DELAY_MS = 2000;
-
 function initHeader() {
   document.querySelectorAll<HTMLElement>('.tab-btn').forEach((btn) => {
     btn.addEventListener('click', () => setActiveTab(btn.dataset.tab ?? 'tabs'));
@@ -38,8 +35,9 @@ function initHeader() {
   $('organizeTabs')?.addEventListener('click', async (e) => {
     const btn = $('organizeTabs') as HTMLButtonElement;
     if (btn.disabled) return;
-    btn.textContent = '…';
     btn.disabled = true;
+    btn.classList.add('busy');
+    showStatus(e.shiftKey ? 'Organizing all windows…' : 'Organizing…');
 
     try {
       const windowId = (await chrome.windows.getCurrent()).id;
@@ -48,20 +46,21 @@ function initHeader() {
         windowId,
         allWindows: e.shiftKey,
       });
-      btn.textContent = response?.success ? 'Organized ✓' : 'Failed';
+      showStatus(response?.success ? 'Organized ✓' : 'Organize failed');
     } catch (err) {
-      btn.textContent = 'Error';
+      showStatus('Organize failed');
       console.error(err);
-    }
-
-    setTimeout(() => {
-      btn.textContent = ORGANIZE_IDLE;
+    } finally {
       btn.disabled = false;
-    }, ORGANIZE_DELAY_MS);
+      btn.classList.remove('busy');
+    }
   });
 
   const versionEl = $('version');
-  if (versionEl) versionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+  const version = chrome.runtime.getManifest().version;
+  if (versionEl) versionEl.textContent = `v${version}`;
+  const aboutSummary = $('aboutSummary');
+  if (aboutSummary) aboutSummary.textContent = `Version ${version} · open source`;
 }
 
 initHeader();

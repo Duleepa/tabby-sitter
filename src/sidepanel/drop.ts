@@ -1,4 +1,5 @@
 // Pure drop-position math for drag & drop in the side panel. No DOM or chrome.* calls.
+import { expandSelectionWithPartners, partnerOf } from '../utils/split';
 
 export interface DropTab {
   id: number;
@@ -6,6 +7,8 @@ export interface DropTab {
   windowId: number;
   groupId: number;
   pinned: boolean;
+  /** Split View id; -1 or absent when not paired. */
+  splitViewId?: number;
 }
 
 export type DropTarget =
@@ -46,9 +49,11 @@ function byPosition(a: DropTab, b: DropTab): number {
 export function computeDrop(
   allTabs: DropTab[],
   draggedIds: number[],
-  target: DropTarget
+  rawTarget: DropTarget
 ): DropPlan | null {
-  const draggedSet = new Set(draggedIds);
+  // A paired tab always travels with its partner.
+  const draggedSet = new Set(expandSelectionWithPartners(draggedIds, allTabs));
+  const target = snapOutOfPair(allTabs, rawTarget);
   const dragged = allTabs.filter((t) => draggedSet.has(t.id)).sort(byPosition);
   if (dragged.length === 0) return null;
 
@@ -90,6 +95,19 @@ export function computeDrop(
   if (!stayPinned) slot = Math.max(slot, pinnedCount);
 
   return { tabIds: dragged.map((t) => t.id), windowId, index: slot, groupId, unpin };
+}
+
+/** A drop between the two halves of a pair lands after the pair instead. */
+export function snapOutOfPair(allTabs: DropTab[], target: DropTarget): DropTarget {
+  if (target.kind !== 'tab') return target;
+  const t = allTabs.find((x) => x.id === target.tabId);
+  const partner = t ? partnerOf(t, allTabs) : undefined;
+  if (!t || !partner) return target;
+  const isLeft = byPosition(t, partner) < 0;
+  if ((isLeft && target.position === 'after') || (!isLeft && target.position === 'before')) {
+    return { kind: 'tab', tabId: isLeft ? partner.id : t.id, position: 'after' };
+  }
+  return target;
 }
 
 /** Slot in `remaining` at the start of a group (atEnd=false) or right after its last remaining member. */

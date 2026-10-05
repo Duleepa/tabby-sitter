@@ -28,6 +28,7 @@
 - **Saved groups**: Save a group (or a tab selection) from the menu, optionally closing it, and restore it later in this or a new window with its title, colour and tab order. Restored tabs are never auto-closed or regrouped by rules.
 - **Auto-unload**: Optionally unload tabs idle for 15 minutes to 4 hours to free memory (never the active, audible or, by default, pinned tabs; per-domain exceptions).
 - **Tidy**: Sort a group's tabs by site, unload a whole group, or merge same-named groups across windows.
+- **Side by side tabs** (Chrome 155+): hover any tab and click the split icon (or select two tabs and press `S`) to open it beside the current tab. Tabby Sitter moves, groups and pins the tab as needed so Chrome accepts the pair; pairs show as one joined row, stay together when dragged or sorted, and are left alone by rules and duplicate auto-close.
 - **Light and dark themes**: follows your system or can be forced in Settings > Appearance; built on design tokens so new themes are a small CSS override.
 - **Minimal permissions**: `tabs`, `tabGroups`, `storage`, `sidePanel`, `alarms`. No host access, no content scripts.
 - **Organize**: Applies rules to the panel's window; Shift-click organizes all windows.

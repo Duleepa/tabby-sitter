@@ -54,4 +54,8 @@ describe('decideTabAction', () => {
   it('keep-with-opener is irrelevant outside rule groups', () => {
     expect(decideTabAction(input({ url: 'https://example.com', keepWithOpener: true }))).toEqual({ kind: 'none' });
   });
+  it('side-by-side tabs are never regrouped or ungrouped', () => {
+    expect(decideTabAction(input({ paired: true }))).toEqual({ kind: 'none' });
+    expect(decideTabAction(input({ paired: true, currentGroupTitle: 'Dev', url: 'https://example.com' }))).toEqual({ kind: 'none' });
+  });
 });

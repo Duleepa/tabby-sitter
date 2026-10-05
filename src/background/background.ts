@@ -1,6 +1,7 @@
 import { getRules, getActiveRules, type GroupRule } from '../storage/rules';
 import { getSettings } from '../storage/config';
 import { addOverrides, clearOverrides, getOverrides } from '../storage/overrides';
+import { isSplit } from '../utils/split';
 import { decideTabAction, type TabAction } from './decide';
 import { ExpectedGroupChanges } from './expected-changes';
 import { retryTabMutation } from '../utils/tabs';
@@ -284,7 +285,8 @@ async function handleDuplicateTab(tab: chrome.tabs.Tab): Promise<boolean> {
     at: Date.now(),
   };
 
-  if (fresh && !settings.duplicateTabConfirm) {
+  // Side-by-side tabs are never auto-closed, only flagged.
+  if (fresh && !settings.duplicateTabConfirm && !isSplit(tab)) {
     await switchToExistingAndClose(existing.id, tabId);
     await addNotice({ ...notice, kind: 'closed' });
     console.log(`[Background] Switched to existing tab ${existing.id}, closed duplicate ${tabId}`);
@@ -485,12 +487,25 @@ async function groupTitleOf(groupId: number): Promise<string | undefined> {
   }
 }
 
-async function processTab(tab: Pick<chrome.tabs.Tab, 'id'>): Promise<void> {
-  if (!tab.id) return;
+// One rules run per tab at a time: a new tab's URL often arrives twice (typed URL, then a redirect),
+// and two overlapping runs could each group the tab or create two groups with the same name.
+const tabRuns = new Map<number, Promise<void>>();
 
+function processTab(tab: Pick<chrome.tabs.Tab, 'id'>): Promise<void> {
+  const tabId = tab.id;
+  if (!tabId) return Promise.resolve();
+  const run = (tabRuns.get(tabId) ?? Promise.resolve()).catch(() => undefined).then(() => processTabNow(tabId));
+  tabRuns.set(tabId, run);
+  void run.finally(() => {
+    if (tabRuns.get(tabId) === run) tabRuns.delete(tabId);
+  }).catch(() => undefined);
+  return run;
+}
+
+async function processTabNow(id: number): Promise<void> {
   let freshTab: chrome.tabs.Tab;
   try {
-    freshTab = await chrome.tabs.get(tab.id);
+    freshTab = await chrome.tabs.get(id);
   } catch {
     return;
   }
@@ -515,6 +530,7 @@ async function processTab(tab: Pick<chrome.tabs.Tab, 'id'>): Promise<void> {
     rules: getActiveRules(allRules),
     currentGroupTitle: await groupTitleOf(currentGroupId),
     manual: overrides.has(tabId),
+    paired: isSplit(freshTab),
     keepWithOpener,
   });
 
@@ -592,6 +608,7 @@ async function organizeWindow(windowId: number): Promise<void> {
       rules,
       currentGroupTitle: groupIdToTitle.get(currentGroupId),
       manual: overrides.has(tab.id),
+      paired: isSplit(tab),
       keepWithOpener: settings.keepOpenedTabsInGroup && currentGroupId !== -1 && opener?.groupId === currentGroupId,
     });
 
@@ -633,7 +650,7 @@ async function sortUnmatchedByDomain(tabs: chrome.tabs.Tab[]): Promise<void> {
 
   for (const tab of tabs) {
     if (!tab.id || !tab.url || isSkippableUrl(tab.url)) continue;
-    if (tab.groupId !== -1) continue;
+    if (tab.groupId !== -1 || isSplit(tab)) continue;
 
     try {
       const hostname = new URL(tab.url).hostname;

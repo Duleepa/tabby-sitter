@@ -9,7 +9,11 @@ export interface DuplicateCandidate {
   active?: boolean;
   pinned?: boolean;
   lastAccessed?: number;
+  /** Split View id; paired tabs are never closed automatically. */
+  splitViewId?: number;
 }
+
+const isPaired = (t: DuplicateCandidate): boolean => (t.splitViewId ?? -1) !== -1;
 
 export interface DuplicateCluster<T extends DuplicateCandidate> {
   key: string;
@@ -58,13 +62,13 @@ export function pickKeeper<T extends DuplicateCandidate>(
   return [...tabs].sort((a, b) => a.windowId - b.windowId || a.index - b.index)[0];
 }
 
-/** Tabs to close for a cluster: everything except the keeper; pinned tabs are never closed. */
+/** Tabs to close for a cluster: everything except the keeper; pinned and side-by-side tabs are never closed. */
 export function tabsToClose<T extends DuplicateCandidate>(
   cluster: DuplicateCluster<T>,
   focusedWindowId?: number
 ): T[] {
   const keeper = pickKeeper(cluster, focusedWindowId);
-  return cluster.tabs.filter((t) => t !== keeper && !t.pinned);
+  return cluster.tabs.filter((t) => t !== keeper && !t.pinned && !isPaired(t));
 }
 
 /** Σ (size − 1) over clusters. */
@@ -83,5 +87,5 @@ export function pickExistingTab<T extends DuplicateCandidate>(candidates: T[], w
 
 /** Tabs to close to keep only `keep` from its cluster; pinned tabs are never closed. */
 export function otherCopiesToClose<T extends DuplicateCandidate>(cluster: DuplicateCluster<T>, keep: T): T[] {
-  return cluster.tabs.filter((t) => t !== keep && !t.pinned);
+  return cluster.tabs.filter((t) => t !== keep && !t.pinned && !isPaired(t));
 }

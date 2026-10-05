@@ -53,6 +53,30 @@ describe('planSortMoves', () => {
   });
 });
 
+describe('planSortMoves with pairs', () => {
+  it('keeps a pair adjacent, sorted by its left tab', () => {
+    const g = tabs([
+      ['https://c.com/', ''],
+      ['https://b.com/', ''],
+      ['https://a.com/', ''],
+      ['https://d.com/', ''],
+    ]).map((x) => (x.id === 2 || x.id === 3 ? { ...x, splitViewId: 9 } : x));
+    // pair (2,3) is keyed by tab 2 (b.com): order c, [b, a], d -> [b, a], c, d
+    expect(sortedOrder(g)).toEqual([2, 3, 1, 4]);
+  });
+
+  it('never splits a pair when other tabs sort between its halves', () => {
+    const g = tabs([
+      ['https://z.com/', ''],
+      ['https://a.com/', ''],
+      ['https://m.com/', ''],
+      ['https://c.com/', ''],
+    ]).map((x) => (x.id === 1 || x.id === 2 ? { ...x, splitViewId: 4 } : x));
+    // keyed by the left tab (z.com): c, m, then the pair
+    expect(sortedOrder(g)).toEqual([4, 3, 1, 2]);
+  });
+});
+
 describe('compareBySite', () => {
   it('ignores www. and falls back to title', () => {
     const a = { id: 1, index: 0, windowId: 1, url: 'https://www.a.com', title: 'b' };

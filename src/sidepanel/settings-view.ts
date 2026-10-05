@@ -11,6 +11,7 @@ import {
 import { showStatus } from './dom';
 import { refreshRules } from './rules-view';
 import { setTheme } from './theme';
+import { chromeMajor, SPLIT_MIN_CHROME, splitAvailabilityText, splitSupported } from '../utils/split';
 import { SETTINGS_OPEN_KEY, settingSummaries } from './setting-summaries';
 
 const $ = (id: string) => document.getElementById(id);
@@ -69,8 +70,26 @@ function initAccordion(): void {
   });
 }
 
+/** Side by side card: how to use it, or why it is missing (Chrome too old). */
+function initSplitCard(): void {
+  const supported = splitSupported();
+  const major = chromeMajor(navigator.userAgent);
+  const summary = $('splitSummary');
+  if (summary) summary.textContent = splitAvailabilityText(supported, major);
+  if (supported) return;
+  const why = $('splitUnavailable');
+  if (why) {
+    why.textContent =
+      major !== null && major < SPLIT_MIN_CHROME
+        ? `Your Chrome is version ${major}. Side by side needs Chrome ${SPLIT_MIN_CHROME} or newer: open the Chrome menu, then Help → About Google Chrome to update, and reopen this panel. The steps above will work once you have updated.`
+        : 'This browser does not let extensions open tabs side by side.';
+    why.classList.remove('hidden');
+  }
+}
+
 export async function initSettingsView() {
   initAccordion();
+  initSplitCard();
   // Config file actions
   $('exportConfig')?.addEventListener('click', async () => {
     try {
