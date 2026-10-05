@@ -5,11 +5,28 @@ import {
   getSettings,
   saveSettings,
   type DuplicateTabMode,
+  type ExtensionSettings,
 } from '../storage/config';
 import { showStatus } from './dom';
 import { refreshRules } from './rules-view';
 
 const $ = (id: string) => document.getElementById(id);
+
+/** Fill the controls from stored settings (also used when a sync file or import changes them). */
+function populate(settings: ExtensionSettings): void {
+  ($('groupUnmatchedByDomain') as HTMLInputElement).checked = settings.groupUnmatchedByDomain;
+  ($('duplicateBadge') as HTMLInputElement).checked = settings.duplicateBadge;
+  ($('duplicateIgnoreParams') as HTMLInputElement).value = settings.duplicateIgnoreParams;
+  ($('autoDiscardMinutes') as HTMLSelectElement).value = String(settings.autoDiscardMinutes);
+  ($('autoDiscardPinned') as HTMLInputElement).checked = settings.autoDiscardPinned;
+  ($('autoDiscardExceptDomains') as HTMLInputElement).value = settings.autoDiscardExceptDomains;
+  ($('keepOpenedTabsInGroup') as HTMLInputElement).checked = settings.keepOpenedTabsInGroup;
+  ($('duplicateTabMode') as HTMLSelectElement).value = settings.duplicateTabMode;
+  ($('duplicateTabDomains') as HTMLInputElement).value = settings.duplicateTabDomains;
+  ($('duplicateTabConfirm') as HTMLInputElement).checked = settings.duplicateTabConfirm;
+  ($('duplicateDomainsGroup') as HTMLElement).style.display =
+    settings.duplicateTabMode === 'prevent-specific' ? '' : 'none';
+}
 
 export async function initSettingsView() {
   // Config file actions
@@ -31,7 +48,7 @@ export async function initSettingsView() {
     const file = input.files?.[0];
     if (!file) return;
 
-    const action = confirm('Merge with existing rules?\n\nOK = Merge\nCancel = Replace all');
+    const action = confirm('Merge with existing rules and saved groups?\n\nOK = Merge\nCancel = Replace all');
     const mode = action ? 'merge' : 'replace';
     const actionLabel = mode === 'merge' ? 'Merged' : 'Replaced';
 
@@ -52,8 +69,10 @@ export async function initSettingsView() {
   });
 
   // Load and save domain grouping setting
-  const settings = await getSettings();
-  ($('groupUnmatchedByDomain') as HTMLInputElement).checked = settings.groupUnmatchedByDomain;
+  populate(await getSettings());
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.settings) getSettings().then(populate, () => undefined);
+  });
 
   $('groupUnmatchedByDomain')?.addEventListener('change', async () => {
     const checked = ($('groupUnmatchedByDomain') as HTMLInputElement).checked;
@@ -64,8 +83,6 @@ export async function initSettingsView() {
 
   const badgeToggle = $('duplicateBadge') as HTMLInputElement;
   const ignoreInput = $('duplicateIgnoreParams') as HTMLInputElement;
-  badgeToggle.checked = settings.duplicateBadge;
-  ignoreInput.value = settings.duplicateIgnoreParams;
   badgeToggle.addEventListener('change', async () => {
     const current = await getSettings();
     current.duplicateBadge = badgeToggle.checked;
@@ -80,9 +97,6 @@ export async function initSettingsView() {
   const discardMinutes = $('autoDiscardMinutes') as HTMLSelectElement;
   const discardPinned = $('autoDiscardPinned') as HTMLInputElement;
   const discardExcept = $('autoDiscardExceptDomains') as HTMLInputElement;
-  discardMinutes.value = String(settings.autoDiscardMinutes);
-  discardPinned.checked = settings.autoDiscardPinned;
-  discardExcept.value = settings.autoDiscardExceptDomains;
   discardMinutes.addEventListener('change', async () => {
     const current = await getSettings();
     current.autoDiscardMinutes = Number(discardMinutes.value);
@@ -100,7 +114,6 @@ export async function initSettingsView() {
   });
 
   const keepToggle = $('keepOpenedTabsInGroup') as HTMLInputElement;
-  keepToggle.checked = settings.keepOpenedTabsInGroup;
   keepToggle.addEventListener('change', async () => {
     const current = await getSettings();
     current.keepOpenedTabsInGroup = keepToggle.checked;
@@ -112,10 +125,6 @@ export async function initSettingsView() {
   const confirmToggle = $('duplicateTabConfirm') as HTMLInputElement;
   const domainsGroup = $('duplicateDomainsGroup') as HTMLElement;
 
-  modeSelect.value = settings.duplicateTabMode;
-  domainsInput.value = settings.duplicateTabDomains;
-  confirmToggle.checked = settings.duplicateTabConfirm;
-  domainsGroup.style.display = settings.duplicateTabMode === 'prevent-specific' ? '' : 'none';
 
   modeSelect.addEventListener('change', async () => {
     domainsGroup.style.display = modeSelect.value === 'prevent-specific' ? '' : 'none';

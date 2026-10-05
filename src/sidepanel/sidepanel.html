@@ -26,6 +26,8 @@
       <button class="tab-btn" role="tab" aria-selected="false" aria-controls="settingsPanel" data-tab="settings">Settings</button>
     </nav>
 
+    <div id="syncNotices" class="notices" aria-live="polite"></div>
+
     <section class="tab-panel tabs-panel" id="tabsPanel" role="tabpanel">
       <div id="notices" class="notices" aria-live="polite"></div>
       <div class="toolbar">
@@ -95,10 +97,67 @@ or regex patterns if using Regex mode"></textarea>
     </section>
 
     <section class="tab-panel scroll hidden" id="settingsPanel" role="tabpanel">
+      <article class="card" id="syncCard">
+        <h2>Sync file</h2>
+        <p class="hint">
+          Keep rules, settings and saved groups in step across computers with a file in a folder you already sync.
+          Tabby Sitter never uploads anything. Your sync service copies the file; see Help.
+        </p>
+        <p id="syncUnsupported" class="hint hidden">This browser does not support linking a file.</p>
+        <label for="syncProfileLabel">Profile name (used in the file name)</label>
+        <input type="text" id="syncProfileLabel" maxlength="40" placeholder="Work" />
+        <p id="syncStatus" class="sync-status" role="status"></p>
+        <div id="syncUnlinked" class="sync-actions">
+          <button id="syncCreate" class="secondary" type="button">Create sync file…</button>
+          <button id="syncLink" class="secondary" type="button">Link existing file…</button>
+        </div>
+        <div id="syncLinked" class="hidden">
+          <div class="sync-actions">
+            <button id="syncReconnect" class="small hidden" type="button">Reconnect</button>
+            <button id="syncNow" class="secondary" type="button">Write now</button>
+            <button id="syncReload" class="secondary" type="button">Reload from file</button>
+            <button id="syncUnlink" class="secondary" type="button">Unlink</button>
+          </div>
+          <div class="card-header-row">
+            <label class="toggle-label" for="syncIncludeGroups">Include saved groups</label>
+            <input type="checkbox" class="rule-toggle" id="syncIncludeGroups" />
+          </div>
+          <div class="card-header-row">
+            <label class="toggle-label" for="syncIncludeSettings">Include settings</label>
+            <input type="checkbox" class="rule-toggle" id="syncIncludeSettings" />
+          </div>
+          <div class="card-header-row">
+            <label class="toggle-label" for="syncAutoLoad">Load changes automatically</label>
+            <input type="checkbox" class="rule-toggle" id="syncAutoLoad" />
+          </div>
+        </div>
+        <details class="sync-help">
+          <summary>How to sync between computers</summary>
+          <p><strong>Disclaimer.</strong> Tabby Sitter only reads and writes a local file that you pick. Any copying of that file between computers is done by your own sync service (Dropbox, iCloud Drive, Google Drive, OneDrive, Syncthing, an Obsidian vault, etc.). Tabby Sitter is not responsible for that sharing: where the file is stored, who can access it, or how it is backed up. The file contains your rules and the URLs of your saved groups, so only keep it in a location you trust.</p>
+          <p><strong>Steps.</strong></p>
+          <ol>
+            <li>Machine 1: click “Create sync file…” and save it inside a synced folder.</li>
+            <li>Wait for your sync service to copy the file to machine 2.</li>
+            <li>Machine 2: click “Link existing file…” and pick the same file.</li>
+            <li>After restarting Chrome, click “Reconnect” so Chrome can access the file again.</li>
+          </ol>
+          <p><strong>Where to put the file.</strong></p>
+          <ul>
+            <li>Dropbox: create the file inside your Dropbox folder, e.g. ~/Dropbox/tabby-sitter.conf.json.</li>
+            <li>iCloud Drive: choose “iCloud Drive” in the picker (on macOS ~/Library/Mobile Documents/com~apple~CloudDocs). “Optimise Mac Storage” may evict the file; keep it downloaded.</li>
+            <li>Google Drive / OneDrive desktop apps: use the synced folder and mark the file “available offline”.</li>
+            <li>Obsidian vault: put the file in the vault folder (synced by Obsidian Sync, iCloud or git). With Obsidian Sync, turn on “Sync all other types” in its settings, otherwise .json files are not synced. Obsidian does not list .json files, so it won’t clutter your notes.</li>
+            <li>Syncthing or any other folder sync works the same way.</li>
+          </ul>
+          <p><strong>Several Chrome profiles?</strong> Each profile has its own copy of the extension, with its own rules, saved groups and linked file. Set a profile name above and “Create sync file…” suggests a matching file name (it stays on this profile and is never written to the file). Give each profile its own file (e.g. tabby-sitter-work.conf.json and tabby-sitter-personal.conf.json) to keep their setups separate, or link the same file in several profiles to share one setup.</p>
+          <p><strong>Tip.</strong> Avoid editing on two machines at the same time. If the “Sync file changed on another device” banner appears, choose which side to keep.</p>
+        </details>
+      </article>
+
       <article class="card">
         <h2>Export Rules</h2>
         <p class="hint">
-          Generate a config file so you can sync rules across computers or back them up.
+          Download a config file (rules, settings and saved groups) to back up or move by hand.
         </p>
         <button id="exportConfig" class="secondary">Export Rules</button>
       </article>
@@ -106,7 +165,7 @@ or regex patterns if using Regex mode"></textarea>
       <article class="card">
         <h2>Import Rules</h2>
         <p class="hint">
-          Load a previously exported config file. This replaces your current rules.
+          Load a previously exported config file. You can merge or replace your rules.
         </p>
         <button id="importConfig" class="secondary">Import Rules</button>
         <input type="file" id="configFileInput" accept=".json" style="display: none" />
