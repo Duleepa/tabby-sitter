@@ -1,33 +1,28 @@
-import { getRules, saveRules, type GroupRule, type GroupColor, type MatchMode } from './rules';
+import { getRules, saveRules, type GroupRule } from './rules';
+import { listSavedGroups, replaceAllSavedGroups } from './saved-groups';
+import { getDeviceId } from './sync-state';
+import { buildSyncFile, parseSyncFile, type SyncContent, type SyncFile } from './sync-file';
 import { generateId } from '../utils/id';
 
-export interface ConfigFile {
-  tabbySitter: {
-    version: string;
-    rules: GroupRule[];
-  };
-}
+export type ConfigFile = SyncFile;
 
 const CONFIG_FILE_NAME = 'tabby-sitter.conf.json';
-const CONFIG_VERSION = '0.2.0';
 
-/**
- * Download current rules as a JSON config file.
- * The user chooses the download location via the browser's native dialog.
- */
-export async function exportConfigFile(): Promise<void> {
-  const rules = await getRules();
-  const config: ConfigFile = {
-    tabbySitter: {
-      version: CONFIG_VERSION,
-      rules,
-    },
-  };
+/** Everything this device would sync: rules, settings and saved groups. */
+export async function readLocalContent(): Promise<SyncContent> {
+  const [rules, settings, savedGroups] = await Promise.all([getRules(), getSettings(), listSavedGroups()]);
+  return { rules, settings, savedGroups };
+}
 
-  const blob = new Blob([JSON.stringify(config, null, 2)], {
-    type: 'application/json',
-  });
+/** Replace the local rules, and settings / saved groups when present in `content`. */
+export async function applyContent(content: SyncContent): Promise<void> {
+  await saveRules(content.rules);
+  if (content.settings) await saveSettings({ ...DEFAULT_SETTINGS, ...content.settings });
+  if (content.savedGroups) await replaceAllSavedGroups(content.savedGroups);
+}
 
+function downloadJson(data: unknown): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -37,59 +32,43 @@ export async function exportConfigFile(): Promise<void> {
 }
 
 /**
- * Import rules from a JSON config file dropped/picked by the user.
- * Accepts new schema (patterns + matchMode) and old single-pattern schema.
+ * Download rules, settings and saved groups as a JSON config file.
+ * The user chooses the download location via the browser's native dialog.
+ */
+export async function exportConfigFile(): Promise<void> {
+  const content = await readLocalContent();
+  const deviceId = await getDeviceId();
+  downloadJson(buildSyncFile(content, { savedAt: new Date().toISOString(), deviceId }));
+}
+
+/**
+ * Import a JSON config file picked by the user. Rules are replaced or merged; settings (if
+ * present) overwrite the keys they contain; saved groups (if present) are replaced, or in merge
+ * mode only those whose id is not already saved are added. Accepts v0.2 (rules only) files.
  */
 export async function importConfigFile(file: File, mode: 'replace' | 'merge' = 'replace'): Promise<GroupRule[]> {
-  // Reject unreasonably large files as a hardening measure
-  const MAX_SIZE = 1024 * 1024; // 1 MB
-  if (file.size > MAX_SIZE) {
-    throw new Error('Config file is too large (max 1 MB)');
-  }
+  const { content } = parseSyncFile(await file.text());
+  const merge = mode === 'merge';
 
-  const text = await file.text();
-  let parsed: ConfigFile;
-  try {
-    parsed = JSON.parse(text) as ConfigFile;
-  } catch {
-    throw new Error('Config file is not valid JSON');
-  }
-
-  if (!parsed.tabbySitter?.rules || !Array.isArray(parsed.tabbySitter.rules)) {
-    throw new Error('Invalid config file: expected { tabbySitter: { rules: [...] } }');
-  }
-
-  const VALID_MATCH_MODES = new Set(['contains', 'regex', 'domain']);
-
-  const rules = (parsed.tabbySitter.rules as any[]).map((r) => ({
-    id: (r.id || generateId()) as string,
-    patterns:
-      Array.isArray(r.patterns) && r.patterns.length > 0
-        ? (r.patterns as string[])
-        : r.pattern
-          ? [r.pattern as string]
-          : [],
-    groupName: (r.groupName || '') as string,
-    description: r.description as string | undefined,
-    color: r.color as GroupColor | undefined,
-    matchMode: VALID_MATCH_MODES.has(String(r.matchMode)) ? (r.matchMode as MatchMode) : 'contains',
-    enabled: typeof r.enabled === 'boolean' ? r.enabled : undefined,
-  }));
-
-  if (rules.some((r) => r.patterns.length === 0)) {
-    throw new Error('Invalid rule: patterns cannot be empty');
-  }
-
-  if (mode === 'merge') {
+  let rules = content.rules;
+  if (merge) {
     const existing = await getRules();
     const existingIds = new Set(existing.map((r) => r.id));
-    const newRules = rules.filter((r) => !existingIds.has(r.id));
-    const merged = [...existing, ...newRules];
-    await saveRules(merged);
-    return merged;
+    rules = [...existing, ...content.rules.filter((r) => !existingIds.has(r.id))];
   }
 
-  await saveRules(rules);
+  const next: SyncContent = { rules };
+  if (content.settings) next.settings = { ...(await getSettings()), ...content.settings };
+  if (content.savedGroups) {
+    if (merge) {
+      const existing = await listSavedGroups();
+      const ids = new Set(existing.map((g) => g.id));
+      next.savedGroups = [...existing, ...content.savedGroups.filter((g) => !ids.has(g.id))];
+    } else {
+      next.savedGroups = content.savedGroups;
+    }
+  }
+  await applyContent(next);
   return rules;
 }
 
@@ -97,9 +76,7 @@ export async function importConfigFile(file: File, mode: 'replace' | 'merge' = '
  * Create a fresh config file with a starter template.
  */
 export function createStarterConfig(): ConfigFile {
-  return {
-    tabbySitter: {
-      version: CONFIG_VERSION,
+  return buildSyncFile({
       rules: [
         {
           id: generateId(),
@@ -142,25 +119,14 @@ export function createStarterConfig(): ConfigFile {
           matchMode: 'contains',
         },
       ],
-    },
-  };
+  });
 }
 
 /**
  * Download the starter config as a file the user can edit and sync.
  */
 export function downloadStarterConfig(): void {
-  const config = createStarterConfig();
-  const blob = new Blob([JSON.stringify(config, null, 2)], {
-    type: 'application/json',
-  });
-
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = CONFIG_FILE_NAME;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadJson(createStarterConfig());
 }
 
 export type DuplicateTabMode = 'allow' | 'prevent-all' | 'prevent-specific';
@@ -178,7 +144,7 @@ export interface ExtensionSettings {
   autoDiscardExceptDomains: string;
 }
 
-const DEFAULT_SETTINGS: ExtensionSettings = {
+export const DEFAULT_SETTINGS: ExtensionSettings = {
   groupUnmatchedByDomain: false,
   duplicateTabMode: 'allow',
   duplicateTabDomains: '',

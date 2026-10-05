@@ -25,11 +25,16 @@ Saved groups restore through the background (`restoreSavedGroup`) inside a quiet
 
 Order in `handleDuplicateTab`: fresh vs non-fresh (consumed once) -> startup grace -> mode/domain gate -> `allowOnce` / `allowedDuplicateTabs` -> pick existing tab (same window first, then most recently accessed). Only a *fresh* tab with "Ask before closing" off is closed (with an Undo notice); every other duplicate is only *flagged*. Navigated tabs are never closed. The toolbar badge shows `duplicateCount` (debounced `setTimeout`, never `setInterval`).
 
+## Sync file
+
+Sync is a file the user picks (File System Access API, handle in IndexedDB `tabby-sitter`/`handles`), driven from the side panel only (`sync-view.ts`); the background is not involved. **`chrome.storage.sync` is deliberately not used** (no data held by Google on the user's behalf; no server, no login). Panel flow under `navigator.locks` (`tabby-sitter-sync`): permission check (else `pending` + Reconnect) -> read/parse file -> `decideSync` -> write / auto-load (Undo = in-memory snapshot) / conflict banner. Applying a file sets `lastHash`/`lastSeen` first so it is never written back. An unparseable file is never overwritten without confirmation. The in-panel help holds a disclaimer: Tabby Sitter only touches the picked file; copying is the user's sync service's job and the file holds rules and saved-group URLs. Each Chrome profile has its own `syncDeviceId`.
+
 ## Manual overrides
 
 Tabs the user places by hand (side panel drag/drop and group menu actions, or a group change in the tab strip that the extension did not cause) are stored as overrides. `processTab` and `organizeAllTabs` skip them. Background code must call `groupTabs()`/`ungroupTabs()` (which record the tab ids in `ExpectedGroupChanges` first) instead of `chrome.tabs.group/ungroup` directly, otherwise its own changes would be mistaken for manual moves. Group changes within 1.5 s of tab creation are ignored (Chrome puts link-opened tabs into the opener's group natively). "Let rules manage" clears the override. Setting `keepOpenedTabsInGroup` (default on) stops unmatched tabs opened from a group tab from being ungrouped.
 
 ### Local storage keys (`chrome.storage.local`)
+- `syncFile` (`SyncFileState`: name, profileLabel (local only, never in the file), include flags, autoLoad, lastHash, lastSeen, lastWriteAt, pending), `syncDeviceId` (per profile)
 - `rules`, `settings` (incl. `autoDiscardMinutes`, `autoDiscardPinned`, `autoDiscardExceptDomains`), `savedGroups` (`SavedGroup[]`: title, colour, tab URLs/titles; no favicons)
 
 ### Session storage keys (`chrome.storage.session`)
@@ -65,7 +70,11 @@ src/
 |------|--------------|
 | `src/background/background.ts` | Listens to `chrome.tabs.onUpdated` and `onCreated`, matches URLs against rules, moves/creates tab groups. Exposes `organizeAllTabs()` via message passing. Includes retry logic for transient Chrome tab mutation errors. |
 | `src/storage/rules.ts` | CRUD for grouping rules via `chrome.storage.local`. Supports multiple patterns per rule and `contains`/`regex` match modes. |
-| `src/storage/config.ts` | Import/export rules as JSON config files for cross-machine sync. Includes starter config generation. |
+| `src/storage/config.ts` | Import/export of the shared config format (rules, settings, saved groups; v0.2 rules-only files still import), `readLocalContent`/`applyContent`, `DEFAULT_SETTINGS`, starter config. |
+| `src/storage/sync-file.ts` | Pure: v0.3 format (`buildSyncFile`, `parseSyncFile` with validation, `syncContent`), `contentHash` (canonical JSON + FNV-1a), `decideSync`, `suggestedSyncFileName`. Unit-tested. |
+| `src/storage/sync-state.ts` | `syncFile` state and `syncDeviceId` in `chrome.storage.local`. |
+| `src/sidepanel/file-link.ts` | File System Access pickers, permission, read/write and IndexedDB handle storage. |
+| `src/sidepanel/sync-view.ts` | "Sync file" card in Settings, sync triggers (debounced storage changes, panel open, visibility), conflict/auto-load notices, help. |
 | `src/sidepanel/sidepanel.html` / `sidepanel.ts` / `styles.css` | Side panel shell: header (Organize, New tab), Tabs/Rules/Settings tablist, styles (light/dark, 28px rows). Opens from the toolbar icon and `Ctrl/Cmd+Shift+Y`. |
 | `src/sidepanel/tabs-view.ts` | Live tab tree: event-coalesced render (one per animation frame), selection, keyboard nav, search, DnD wiring, context/group menus, inline group rename. Never put tab titles/URLs in `innerHTML`. |
 | `src/sidepanel/tab-tree.ts` | Pure: `buildWindowTree`, `filterTree`, group colors. Unit-tested. |
@@ -175,8 +184,11 @@ Rules can be exported/imported as JSON via the side panel (Settings tab) for syn
 ```typescript
 interface ConfigFile {
   tabbySitter: {
-    version: string;   // "0.2.0"
+    version: string;   // "0.3.0" (0.2.x rules-only files still import)
+    savedAt?: string; deviceId?: string;
     rules: GroupRule[];
+    settings?: Partial<ExtensionSettings>;
+    savedGroups?: SavedGroup[];
   };
 }
 ```
@@ -188,7 +200,7 @@ interface ConfigFile {
 
 **Starter Config:** The Settings tab also offers a "Create Starter Config" button that downloads a pre-populated config with example rules.
 
-**Safety:** Imported files are capped at 1 MB. Regex patterns are capped at 5000 characters.
+**Safety:** Imported files are capped at 5 MB. Regex patterns are capped at 5000 characters.
 
 **Why not auto-read from disk?**
 Chrome extensions cannot access arbitrary filesystem paths for security. The user must explicitly choose the file via the browser's native file picker (`<input type="file">`).

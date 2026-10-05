@@ -1149,3 +1149,36 @@ footer .sep {
   border: 1px solid var(--primary);
   box-shadow: none;
 }
+
+/* Sync file card */
+.sync-status {
+  margin: 4px 0 8px;
+  font-size: 0.78rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.sync-help {
+  margin-top: 8px;
+  font-size: 0.78rem;
+}
+.sync-help summary {
+  cursor: pointer;
+  color: var(--primary);
+}
+.sync-help ol,
+.sync-help ul {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.notice.sync .notice-text {
+  white-space: normal;
+}
+.notice.sync {
+  flex-wrap: wrap;
+}

@@ -2,6 +2,7 @@ import { showStatus } from './dom';
 import { initSavedView } from './saved-view';
 import { initRulesView } from './rules-view';
 import { initSettingsView } from './settings-view';
+import { initSyncView } from './sync-view';
 import { initDuplicatesView } from './duplicates-view';
 import { initTabsView } from './tabs-view';
 
@@ -65,3 +66,4 @@ initDuplicatesView();
 initSavedView();
 initRulesView().catch((err) => showStatus('Failed to load rules: ' + String(err)));
 initSettingsView().catch((err) => showStatus('Failed to load settings: ' + String(err)));
+initSyncView().catch((err) => showStatus('Failed to start sync: ' + String(err)));
