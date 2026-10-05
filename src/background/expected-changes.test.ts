@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { ExpectedGroupChanges } from './expected-changes';
 
 describe('ExpectedGroupChanges', () => {
-  it('consumes an expected change exactly once', () => {
+  it('covers every change event for an expected tab within the ttl', () => {
     const t = new ExpectedGroupChanges(() => 0);
     t.expect([1, 2]);
     expect(t.consume(1)).toBe(true);
-    expect(t.consume(1)).toBe(false);
+    expect(t.consume(1)).toBe(true); // e.g. move-induced change, then the group itself
     expect(t.consume(2)).toBe(true);
   });
 

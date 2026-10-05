@@ -258,3 +258,39 @@ describe('planMoves', () => {
     expect(planMoves(all, plan!)).toEqual([{ tabId: 1, windowId: 1, index: 3 }]);
   });
 });
+
+describe('side-by-side pairs', () => {
+  // tabs 2 and 3 are a pair
+  const paired = () => tabs({ 2: { splitViewId: 5 }, 3: { splitViewId: 5 } });
+
+  it('dragging one half moves the partner too', () => {
+    const p = computeDrop(paired(), [3], { kind: 'tab', tabId: 7, position: 'after' });
+    expect(p?.tabIds).toEqual([2, 3]);
+    const order = simulateMoves(paired(), planMoves(paired(), p as NonNullable<typeof p>))[1];
+    expect(order).toEqual([1, 4, 5, 6, 7, 2, 3]);
+  });
+
+  it('a drop between the halves snaps to after the pair', () => {
+    const left = computeDrop(paired(), [1], { kind: 'tab', tabId: 2, position: 'after' });
+    const right = computeDrop(paired(), [1], { kind: 'tab', tabId: 3, position: 'before' });
+    const after = computeDrop(paired(), [1], { kind: 'tab', tabId: 3, position: 'after' });
+    expect(left?.index).toBe(after?.index);
+    expect(right?.index).toBe(after?.index);
+  });
+
+  it('dropping before the pair or after it is unaffected', () => {
+    expect(computeDrop(paired(), [1], { kind: 'tab', tabId: 2, position: 'before' })?.index).toBe(0);
+  });
+
+  it('dropping on the partner of a dragged tab is a no-op', () => {
+    expect(computeDrop(paired(), [2], { kind: 'tab', tabId: 3, position: 'after' })).toBeNull();
+  });
+
+  it('moving a pair into a group moves both', () => {
+    const p = computeDrop(paired(), [2], { kind: 'group', groupId: 10, position: 'into' });
+    expect(p).toMatchObject({ tabIds: [2, 3], groupId: 10 });
+    const order = simulateMoves(paired(), planMoves(paired(), p as NonNullable<typeof p>))[1];
+    expect(order.slice(0, 1)).toEqual([1]);
+    expect(Math.abs(order.indexOf(2) - order.indexOf(3))).toBe(1);
+  });
+});

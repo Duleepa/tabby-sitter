@@ -21,6 +21,10 @@ It auto-organizes browser tabs into tab groups based on user-defined URL pattern
 
 Saved groups restore through the background (`restoreSavedGroup`) inside a quiet window; restored tabs are also marked manual and allowed as duplicates. An alarm `auto-discard` (every 5 min) unloads idle tabs via `pickTabsToDiscard`; it is reconciled idempotently at SW start, install, startup and every settings change. Group menu actions: Save group, Save & close, Unload group, Sort tabs by site, Merge groups named "X" here (reuses `applyDrop` with a group "into" target).
 
+## Split view (side by side)
+
+Chrome 155+ API, no permission: `tab.splitViewId` (-1 = none), `chrome.tabs.createSplit([a, b])`, `chrome.tabs.create({ splitWithTabId, index? })`, `chrome.tabs.unsplit(id)`. Pairs are 2 adjacent tabs in one window with the same group and pinned state. `src/utils/split.ts` is the typed shim (`splitSupported()`, wrappers, pure `partnerOf` / `expandSelectionWithPartners` / `pairsIn` / `nextSplitFix`); when unsupported every split UI element is absent. The panel fixes constraints instead of erroring: `pairTabs(anchor, other)` loops `nextSplitFix` (unsplit -> match pinned -> move beside the anchor, into its window -> match group), marks the moved tab manual, then `createSplit`. Pairs render as one `.split-pair` container (also in the pinned strip); each paired row has an Unsplit button, others a "beside" button; key `S`. Drag/move/pin/group actions carry the partner (`computeDrop` expands it; a drop between halves snaps after the pair; `planSortMoves` sorts pairs as units keyed by the left tab). Panel mutations run inside `keepingPairs` (unsplit, act, re-pair). Background: `decideTabAction({ paired })` -> none, duplicates never auto-close or `closeDuplicates` a paired tab (flag only), `sortUnmatchedByDomain` skips them. Settings has a "Side by side" card: how to use it, or (via `chromeMajor` / `splitAvailabilityText`) why it is missing, e.g. "Needs Chrome 155 (you have 154)". Chrome moves of a single half break the pair (WECG proposal), hence `keepingPairs`.
+
 ## Theming
 
 - Tokens live in `src/sidepanel/theme.css` (documented contract at the top): surfaces, text, lines, interaction, accent, status, `--group-<name>` (Chrome's tab-group palette), radii, spacing, type, motion, shadows. It is the only place colour values may appear.
@@ -83,7 +87,7 @@ src/
 | `src/storage/sync-state.ts` | `syncFile` state and `syncDeviceId` in `chrome.storage.local`. |
 | `src/sidepanel/file-link.ts` | File System Access pickers, permission, read/write and IndexedDB handle storage. |
 | `src/sidepanel/sync-view.ts` | "Sync file" card in Settings, sync triggers (debounced storage changes, panel open, visibility), conflict/auto-load notices, help. |
-| `src/sidepanel/sidepanel.html` / `sidepanel.ts` / `styles.css` | Side panel shell: header (Organize, New tab), Tabs/Rules/Settings tablist, styles (light/dark, 28px rows). Opens from the toolbar icon and `Ctrl/Cmd+Shift+Y`. |
+| `src/sidepanel/sidepanel.html` / `sidepanel.ts` / `styles.css` | Side panel shell: one header row: Tabs/Saved/Rules/Settings tablist plus icon buttons Organize (wand) and New tab (no brand row: Chrome already shows the name above the panel), styles (light/dark, 28px rows). Opens from the toolbar icon and `Ctrl/Cmd+Shift+Y`. |
 | `src/sidepanel/tabs-view.ts` | Live tab tree: event-coalesced render (one per animation frame), selection, keyboard nav, search, DnD wiring, context/group menus, inline group rename. Never put tab titles/URLs in `innerHTML`. |
 | `src/sidepanel/tab-tree.ts` | Pure: `buildWindowTree`, `filterTree`, group colors. Unit-tested. |
 | `src/sidepanel/drop.ts` | Pure: `computeDrop` (tab drags) and `computeGroupMove` (group drags). Unit-tested. |
@@ -93,7 +97,7 @@ src/
 | `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export/starter config, duplicate-tab (mode, ask first, toolbar badge, extra ignored params), keep-in-group and domain-sorting settings. |
 | `src/sidepanel/setting-summaries.ts` | Pure `settingSummaries(settings, discardLabel)`: the one-line state under each Settings card. Settings tab is an exclusive accordion (`<details class="card setting" name="settings">`); the open card is remembered in `localStorage` key `settingsOpen`. |
 | `src/background/decide.ts` | Pure `decideTabAction({ url, rules, currentGroupTitle, manual, keepWithOpener })` → group / ungroup / none. Used by both `processTab` and `organizeAllTabs`. |
-| `src/background/expected-changes.ts` | `ExpectedGroupChanges`: tab ids whose group change the extension itself is causing (3 s TTL, injectable clock). |
+| `src/background/expected-changes.ts` | `ExpectedGroupChanges`: tab ids whose group change the extension itself is causing (3 s TTL, injectable clock). Not single-use: every groupId event inside the TTL counts as expected (one action can emit several). `processTab` runs are serialised per tab (`tabRuns`). |
 | `src/storage/overrides.ts` | Manual overrides (`getOverrides`, `isOverridden`, `addOverrides`, `clearOverrides`) in `chrome.storage.session`; per-call read-modify-write, cache invalidated by `storage.onChanged`. |
 | `src/utils/url.ts` | Shared skip-prefix list, `isRealPageUrl`, `normalizeUrlForDuplicate(url, extraIgnoredParams)` (drops fragment, `www.`, tracking params, sorts params), `parseIgnoreParams`. |
 | `src/utils/duplicates.ts` | Pure: `findDuplicateClusters`, `pickKeeper`, `tabsToClose`, `duplicateCount`, `pickExistingTab`. Shared by background (badge, closeDuplicates) and panel (chip, Duplicates view) so counts agree. |
@@ -106,6 +110,7 @@ src/
 | `src/storage/duplicates.ts` | Session storage for notices and allowed duplicate tabs (background is the only writer, serialised). |
 | `src/background/allow-once.ts` | `AllowOnce`: URLs reopened by Undo are not treated as duplicates for 10 s. |
 | `src/sidepanel/duplicates-view.ts` | Notice bar, Duplicates chip and Duplicates view. |
+| `src/utils/split.ts` | Split View shim + pure pair helpers and `nextSplitFix` (constraint fixing plan). Unit-tested. |
 | `src/utils/tabs.ts` | `retryTabMutation` (shared by background and side panel). |
 | `src/utils/id.ts` | Simple ID generation utility. |
 

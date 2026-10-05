@@ -1,6 +1,6 @@
 import { el, showStatus } from './dom';
 import { isMenuOpen, openMenu, type MenuItem } from './context-menu';
-import { computeDrop, computeGroupMove, type DropTarget } from './drop';
+import { computeDrop, computeGroupMove, snapOutOfPair, type DropTarget } from './drop';
 import {
   activateTab,
   applyDrop,
@@ -16,6 +16,10 @@ import {
   alwaysGroupSite,
   letRulesManage,
   mergeSameNamedGroups,
+  openBesideCurrent,
+  openNewBeside,
+  openSideBySide,
+  unsplitTab,
   sameNamedGroups,
   sortGroupBySite,
   siteHost,
@@ -34,6 +38,7 @@ import {
 import { parseIgnoreParams } from '../utils/url';
 import { listSavedGroups, replaceSavedGroup, saveGroup, snapshotFromTabs } from '../storage/saved-groups';
 import { generateId } from '../utils/id';
+import { expandSelectionWithPartners, isSplit, partnerOf, splitIdOf, splitSupported } from '../utils/split';
 import { buildWindowTree, filterTree, GROUP_COLORS, type WindowTree } from './tab-tree';
 
 interface RowRef {
@@ -124,6 +129,69 @@ function fail(err: unknown): void {
 
 function run(p: Promise<unknown>): void {
   p.catch(fail);
+}
+
+// Side by side (Chrome Split View): every split UI element is absent when the API is missing.
+const splitOn = splitSupported();
+
+function runSplit(p: Promise<unknown>): void {
+  p.then(scheduleRender).catch((err) => {
+    console.error('[Sidepanel] split view', err);
+    showStatus("Couldn't put those tabs side by side. Chrome wouldn't allow it just now; try again in a moment.");
+  });
+}
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/** Two panes side by side; `currentColor` so it follows the theme. */
+function splitIcon(className: string, unsplitMark = false): SVGElement {
+  const svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('class', className);
+  svg.setAttribute('viewBox', '0 0 16 16');
+  svg.setAttribute('width', '14');
+  svg.setAttribute('height', '14');
+  svg.setAttribute('aria-hidden', 'true');
+  const frame = document.createElementNS(SVG_NS, 'rect');
+  for (const [k, v] of Object.entries({ x: '1.5', y: '2.5', width: '13', height: '11', rx: '2', fill: 'none', stroke: 'currentColor', 'stroke-width': '1.4' })) {
+    frame.setAttribute(k, v);
+  }
+  const divider = document.createElementNS(SVG_NS, 'path');
+  divider.setAttribute('d', unsplitMark ? 'M8 2.5v3.2M8 10.3v3.2' : 'M8 2.5v11');
+  divider.setAttribute('stroke', 'currentColor');
+  divider.setAttribute('stroke-width', '1.4');
+  svg.append(frame, divider);
+  return svg;
+}
+
+function splitButton(tab: chrome.tabs.Tab): HTMLElement {
+  const paired = isSplit(tab);
+  const label = paired ? 'Unsplit' : tab.active ? 'Open a new tab beside' : 'Open beside the current tab';
+  const btn = el('button', `split-btn${paired ? ' unsplit' : ''}`, {
+    type: 'button',
+    tabindex: '-1',
+    title: label,
+    'aria-label': label,
+  });
+  btn.appendChild(splitIcon('split-icon', paired));
+  return btn;
+}
+
+/** Append tab rows; the two rows of a pair share one joined container. */
+function appendTabRows(parent: HTMLElement, tabs: chrome.tabs.Tab[], build: (t: chrome.tabs.Tab) => HTMLElement, pinned = false): void {
+  for (let i = 0; i < tabs.length; i++) {
+    const tab = tabs[i];
+    const next = tabs[i + 1];
+    if (splitOn && isSplit(tab) && next && splitIdOf(next) === splitIdOf(tab)) {
+      const pair = el('div', `split-pair${pinned ? ' pin-pair' : ''}`, { role: 'group', 'aria-label': 'Side by side' });
+      const mark = el('span', 'split-mark', { 'aria-hidden': 'true' });
+      mark.appendChild(splitIcon('split-icon'));
+      pair.append(mark, build(tab), build(next));
+      parent.appendChild(pair);
+      i++;
+    } else {
+      parent.appendChild(build(tab));
+    }
+  }
 }
 
 // ---------- data ----------
@@ -252,6 +320,7 @@ function tabRow(tab: chrome.tabs.Tab, level: number): HTMLElement {
       el('button', 'dup-pill', { type: 'button', tabindex: '-1', title: label, 'aria-label': label }, `${dup.cluster.tabs.length}×`)
     );
   }
+  if (splitOn) row.appendChild(splitButton(tab));
   row.appendChild(el('button', 'close', { type: 'button', 'aria-label': 'Close tab', tabindex: '-1' }, '×'));
   state.order.push({ key: `t:${id}`, kind: 'tab', id });
   return row;
@@ -307,7 +376,7 @@ function groupNode(group: chrome.tabGroups.TabGroup, tabs: chrome.tabs.Tab[]): H
 
   if (!collapsed) {
     const body = el('div', 'group-tabs', { role: 'group' });
-    for (const tab of tabs) body.appendChild(tabRow(tab, 2));
+    appendTabRows(body, tabs, (t) => tabRow(t, 2));
     wrap.appendChild(body);
   }
   return wrap;
@@ -318,12 +387,23 @@ function windowSection(tree: WindowTree, label: string | null, last: boolean): H
   if (label) section.appendChild(el('div', 'window-label', undefined, label));
   if (tree.pinned.length > 0) {
     const pins = el('div', 'pinned-row', { role: 'group', 'aria-label': 'Pinned tabs' });
-    for (const t of tree.pinned) pins.appendChild(pinnedRow(t));
+    appendTabRows(pins, tree.pinned, pinnedRow, true);
     section.appendChild(pins);
   }
+  let loose: chrome.tabs.Tab[] = [];
+  const flushLoose = () => {
+    appendTabRows(section, loose, (t) => tabRow(t, 1));
+    loose = [];
+  };
   for (const node of tree.nodes) {
-    section.appendChild(node.kind === 'tab' ? tabRow(node.tab, 1) : groupNode(node.group, node.tabs));
+    if (node.kind === 'tab') {
+      loose.push(node.tab);
+    } else {
+      flushLoose();
+      section.appendChild(groupNode(node.group, node.tabs));
+    }
   }
+  flushLoose();
   section.appendChild(el('div', 'drop-end', { 'data-window-id': String(tree.windowId), 'aria-hidden': 'true' }));
   return section;
 }
@@ -571,6 +651,37 @@ function siteRuleItems(tab: chrome.tabs.Tab | undefined): MenuItem[] {
   return [];
 }
 
+function splitMenuItems(tabs: chrome.tabs.Tab[]): MenuItem[] {
+  if (!splitOn) return [];
+  const ids = tabs.map((t) => t.id as number);
+  const out: MenuItem[] = [];
+  if (tabs.length === 2) {
+    if (splitIdOf(tabs[0]) !== -1 && splitIdOf(tabs[0]) === splitIdOf(tabs[1])) {
+      out.push({ type: 'item', label: 'Unsplit', onSelect: () => runSplit(unsplitTab(ids[0])) });
+    } else {
+      out.push({ type: 'item', label: 'Open side by side', onSelect: () => runSplit(openSideBySide([ids[0], ids[1]])) });
+    }
+  } else if (tabs.length === 1) {
+    const tab = tabs[0];
+    const partner = partnerOf(tab, state.tabs);
+    if (partner) {
+      out.push(
+        { type: 'item', label: 'Unsplit', onSelect: () => runSplit(unsplitTab(ids[0])) },
+        { type: 'item', label: 'Close both', danger: true, onSelect: () => run(closeTabs([ids[0], partner.id as number])) }
+      );
+    }
+    if (!tab.active) {
+      out.push({
+        type: 'item',
+        label: 'Open beside current tab',
+        onSelect: () => runSplit(openBesideCurrent(ids[0], state.windowId)),
+      });
+    }
+    out.push({ type: 'item', label: 'Open new tab beside', onSelect: () => runSplit(openNewBeside(ids[0])) });
+  }
+  return out;
+}
+
 function openTabMenu(tabId: number, x: number, y: number): void {
   const ids = actionTargets(tabId);
   const tabs = ids.map(tabById).filter((t): t is chrome.tabs.Tab => !!t);
@@ -619,6 +730,7 @@ function openTabMenu(tabId: number, x: number, y: number): void {
     });
   }
   items.push(...siteRuleItems(tabById(tabId)));
+  items.push(...splitMenuItems(tabs));
   if (items.length > 0) items.push({ type: 'separator' });
   items.push(
     { type: 'submenu', label: 'Move to group', items: groupItems },
@@ -718,6 +830,14 @@ function targetAt(e: DragEvent): { target: DropTarget; el: HTMLElement; cls: str
   if (!result) return null;
 
   const all = toDropTabs(state.tabs);
+  if (drag.kind === 'tabs' && result.target.kind === 'tab') {
+    // Between the two halves of a pair the drop lands after the pair; show it there.
+    const snapped = snapOutOfPair(all, result.target);
+    if (snapped !== result.target && snapped.kind === 'tab') {
+      const snappedRow = rowByKey(`t:${snapped.tabId}`);
+      if (snappedRow) result = { target: snapped, el: snappedRow, cls: 'drop-after' };
+    }
+  }
   const valid =
     drag.kind === 'tabs'
       ? computeDrop(all, drag.ids, result.target) !== null
@@ -737,7 +857,8 @@ function onDragStart(e: DragEvent): void {
   const ref = row ? refOf(row) : null;
   if (!row || !ref || !e.dataTransfer) return;
   if (ref.kind === 'tab') {
-    state.drag = { kind: 'tabs', ids: actionTargets(ref.id) };
+    const targets = actionTargets(ref.id);
+    state.drag = { kind: 'tabs', ids: splitOn ? expandSelectionWithPartners(targets, state.tabs) : targets };
     const dragIds = new Set(state.drag.ids);
     requestAnimationFrame(() =>
       treeEl.querySelectorAll<HTMLElement>('.row[data-tab-id]').forEach((r) => {
@@ -808,6 +929,12 @@ function onClick(e: MouseEvent): void {
     return;
   }
 
+  if (target.closest('.split-btn')) {
+    runSplit(
+      target.closest('.split-btn.unsplit') ? unsplitTab(ref.id) : openBesideCurrent(ref.id, state.windowId)
+    );
+    return;
+  }
   if (target.closest('.close')) {
     run(closeTabs([ref.id]));
     return;
@@ -962,6 +1089,17 @@ function onKeyDown(e: KeyboardEvent): void {
         if (g) run(updateGroup(ref.id, { collapsed: !g.collapsed }));
       }
       break;
+    case 's':
+    case 'S': {
+      if (!splitOn || ref.kind !== 'tab' || e.metaKey || e.ctrlKey || e.altKey) break;
+      e.preventDefault();
+      const sel = [...state.selection];
+      if (sel.length === 2) runSplit(openSideBySide([sel[0], sel[1]]));
+      else if (sel.length === 0 || (sel.length === 1 && sel[0] === ref.id)) {
+        runSplit(openBesideCurrent(ref.id, state.windowId));
+      } else showStatus('Select two tabs, then press S to open them side by side');
+      break;
+    }
     case 'Delete':
     case 'Backspace':
       if (ref.kind === 'tab') {

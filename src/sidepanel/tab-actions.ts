@@ -1,4 +1,15 @@
 import { retryTabMutation } from '../utils/tabs';
+import {
+  createSplit,
+  createSplitWithNewTab,
+  expandSelectionWithPartners,
+  isSplit,
+  nextSplitFix,
+  pairsIn,
+  splitIdOf,
+  splitSupported,
+  unsplit,
+} from '../utils/split';
 import { computeDrop, computeGroupMove, planMoves, type DropTab, type DropTarget } from './drop';
 import { nextUnusedColor } from './tab-tree';
 import { planSortMoves } from './sort';
@@ -15,7 +26,7 @@ export function toDropTabs(tabs: chrome.tabs.Tab[]): DropTab[] {
   const out: DropTab[] = [];
   for (const t of tabs) {
     if (t.id === undefined) continue;
-    out.push({ id: t.id, index: t.index, windowId: t.windowId, groupId: t.groupId, pinned: t.pinned });
+    out.push({ id: t.id, index: t.index, windowId: t.windowId, groupId: t.groupId, pinned: t.pinned, splitViewId: t.splitViewId });
   }
   return out;
 }
@@ -33,11 +44,14 @@ export async function closeTabs(ids: number[]): Promise<void> {
 }
 
 export async function moveToGroup(ids: number[], groupId: number): Promise<void> {
+  ids = await withPartners(ids);
   const list = nonEmpty(ids);
   if (!list) return;
   await addOverrides(ids);
-  await unpinTabs(await pinnedAmong(list));
-  await retryTabMutation(() => chrome.tabs.group({ tabIds: list, groupId }));
+  await keepingPairs(ids, async () => {
+    await unpinTabs(await pinnedAmong(list));
+    await retryTabMutation(() => chrome.tabs.group({ tabIds: list, groupId }));
+  });
 }
 
 export async function moveToNewGroup(
@@ -46,27 +60,34 @@ export async function moveToNewGroup(
   name: string,
   usedColors: string[]
 ): Promise<void> {
+  ids = await withPartners(ids);
   const list = nonEmpty(ids);
   if (!list) return;
   await addOverrides(ids);
-  await unpinTabs(await pinnedAmong(list));
-  const groupId = await retryTabMutation(() =>
-    chrome.tabs.group({ tabIds: list, createProperties: { windowId } })
-  );
-  await chrome.tabGroups.update(groupId, { title: name, color: nextUnusedColor(usedColors) });
+  await keepingPairs(ids, async () => {
+    await unpinTabs(await pinnedAmong(list));
+    const groupId = await retryTabMutation(() =>
+      chrome.tabs.group({ tabIds: list, createProperties: { windowId } })
+    );
+    await chrome.tabGroups.update(groupId, { title: name, color: nextUnusedColor(usedColors) });
+  });
 }
 
 export async function removeFromGroup(ids: number[]): Promise<void> {
+  ids = await withPartners(ids);
   const list = nonEmpty(ids);
   if (!list) return;
   await addOverrides(ids);
-  await retryTabMutation(() => chrome.tabs.ungroup(list));
+  await keepingPairs(ids, () => retryTabMutation(() => chrome.tabs.ungroup(list)));
 }
 
 export async function setPinned(ids: number[], pinned: boolean): Promise<void> {
-  for (const id of ids) {
-    await retryTabMutation(() => chrome.tabs.update(id, { pinned }));
-  }
+  ids = await withPartners(ids);
+  await keepingPairs(ids, async () => {
+    for (const id of ids) {
+      await retryTabMutation(() => chrome.tabs.update(id, { pinned }));
+    }
+  });
 }
 
 export async function discardTabs(tabs: chrome.tabs.Tab[]): Promise<void> {
@@ -97,6 +118,105 @@ export async function updateGroup(
   await chrome.tabGroups.update(groupId, props);
 }
 
+// ---------- side by side (Split View) ----------
+
+/** `ids` plus the partner of every paired tab. */
+async function withPartners(ids: number[]): Promise<number[]> {
+  if (!splitSupported()) return ids;
+  return expandSelectionWithPartners(ids, await chrome.tabs.query({}));
+}
+
+/**
+ * Run `fn` (which moves/groups/pins `ids`) with every pair fully inside `ids` unsplit, then pair the
+ * halves again afterwards (best effort: the tabs are already where the user wanted them).
+ */
+async function keepingPairs<T>(ids: number[], fn: () => Promise<T>): Promise<T> {
+  if (!splitSupported()) return fn();
+  const idSet = new Set(ids);
+  const pairs = pairsIn(await chrome.tabs.query({})).filter(
+    ([a, b]) => a.id !== undefined && b.id !== undefined && idSet.has(a.id) && idSet.has(b.id)
+  );
+  if (pairs.length === 0) return fn();
+  for (const [a] of pairs) await unsplit(splitIdOf(a));
+  try {
+    return await fn();
+  } finally {
+    for (const [a, b] of pairs) {
+      try {
+        await pairTabs(a.id as number, b.id as number);
+      } catch (err) {
+        console.warn('[Sidepanel] could not restore side-by-side pair', err);
+      }
+    }
+  }
+}
+
+/**
+ * Put `otherId` beside `anchorId` as a Split View pair. Fixes what Chrome requires instead of failing:
+ * unsplits either tab if paired elsewhere, matches pinned state, moves `otherId` next to the anchor
+ * (into its window) and into its group. The moved tab becomes a manual override.
+ */
+export async function pairTabs(anchorId: number, otherId: number): Promise<void> {
+  let overridden = false;
+  for (let step = 0; step < 8; step++) {
+    const [a, b] = await Promise.all([chrome.tabs.get(anchorId), chrome.tabs.get(otherId)]);
+    const fix = nextSplitFix({ ...a, id: anchorId }, { ...b, id: otherId });
+    switch (fix.kind) {
+      case 'already':
+        return;
+      case 'ready':
+        await retryTabMutation(() => createSplit(fix.ids));
+        return;
+      case 'unsplit':
+        await retryTabMutation(() => unsplit(fix.splitViewId));
+        break;
+      default:
+        if (!overridden) {
+          await addOverrides([otherId]);
+          overridden = true;
+        }
+        if (fix.kind === 'pin') {
+          await retryTabMutation(() => chrome.tabs.update(fix.tabId, { pinned: fix.pinned }));
+        } else if (fix.kind === 'move') {
+          await retryTabMutation(() => chrome.tabs.move(fix.tabId, { windowId: fix.windowId, index: fix.index }));
+        } else if (fix.groupId === -1) {
+          await retryTabMutation(() => chrome.tabs.ungroup(fix.tabId));
+        } else {
+          await retryTabMutation(() => chrome.tabs.group({ tabIds: fix.tabId, groupId: fix.groupId }));
+        }
+    }
+  }
+  throw new Error('Could not line the tabs up');
+}
+
+/** Pair `tabId` with the active tab of `windowId`; on the active tab itself, open a new tab beside it. */
+export async function openBesideCurrent(tabId: number, windowId: number): Promise<void> {
+  const [active] = await chrome.tabs.query({ windowId, active: true });
+  if (!active || active.id === undefined) throw new Error('No current tab to open beside');
+  if (active.id === tabId) await openNewBeside(tabId);
+  else await pairTabs(active.id, tabId);
+}
+
+export async function openNewBeside(tabId: number): Promise<void> {
+  const tab = await chrome.tabs.get(tabId);
+  if (isSplit(tab)) await retryTabMutation(() => unsplit(splitIdOf(tab)));
+  await retryTabMutation(() => createSplitWithNewTab({ ...tab, id: tabId }));
+}
+
+/** Two tabs: anchor = the active one if either is, else the first in strip order. */
+export async function openSideBySide(ids: [number, number]): Promise<void> {
+  const tabs = await Promise.all(ids.map((id) => chrome.tabs.get(id)));
+  const [first, second] = [...tabs].sort((a, b) => a.windowId - b.windowId || a.index - b.index);
+  const anchor = second.active && !first.active ? second : first;
+  const other = anchor === first ? second : first;
+  await pairTabs(anchor.id as number, other.id as number);
+}
+
+export async function unsplitTab(tabId: number): Promise<void> {
+  const tab = await chrome.tabs.get(tabId);
+  if (isSplit(tab)) await retryTabMutation(() => unsplit(splitIdOf(tab)));
+}
+
 async function pinnedAmong(ids: number[]): Promise<number[]> {
   const out: number[] = [];
   for (const id of ids) {
@@ -118,6 +238,11 @@ async function unpinTabs(ids: number[]): Promise<void> {
  * (never relying on Chrome's implicit join behaviour).
  */
 export async function applyDrop(draggedIds: number[], target: DropTarget): Promise<void> {
+  const withPartnersIds = await withPartners(draggedIds);
+  await keepingPairs(withPartnersIds, () => applyDropInner(withPartnersIds, target));
+}
+
+async function applyDropInner(draggedIds: number[], target: DropTarget): Promise<void> {
   let all = toDropTabs(await chrome.tabs.query({}));
   let plan = computeDrop(all, draggedIds, target);
   if (!plan) return;
@@ -190,11 +315,17 @@ export async function alwaysGroupSite(
 export async function sortGroupBySite(groupId: number): Promise<void> {
   const tabs = (await chrome.tabs.query({ groupId })).sort((a, b) => a.index - b.index);
   const moves = planSortMoves(
-    tabs.flatMap((t) => (t.id === undefined ? [] : [{ id: t.id, index: t.index, windowId: t.windowId, url: t.url, title: t.title }]))
+    tabs.flatMap((t) =>
+      t.id === undefined
+        ? []
+        : [{ id: t.id, index: t.index, windowId: t.windowId, url: t.url, title: t.title, splitViewId: t.splitViewId }]
+    )
   );
-  for (const m of moves) {
-    await retryTabMutation(() => chrome.tabs.move(m.tabId, { windowId: m.windowId, index: m.index }));
-  }
+  await keepingPairs(tabs.flatMap((t) => (t.id === undefined ? [] : [t.id])), async () => {
+    for (const m of moves) {
+      await retryTabMutation(() => chrome.tabs.move(m.tabId, { windowId: m.windowId, index: m.index }));
+    }
+  });
 }
 
 /** Other groups sharing this group's (non-empty) title, in any normal window. */

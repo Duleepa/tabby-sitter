@@ -120,3 +120,13 @@ describe('otherCopiesToClose', () => {
     expect(otherCopiesToClose({ key: 'k', tabs: [a, b] }, a)).toEqual([]);
   });
 });
+
+describe('side-by-side tabs are never closed', () => {
+  it('tabsToClose and otherCopiesToClose skip paired tabs', () => {
+    const a = t({});
+    const b = t({ splitViewId: 3 });
+    const c = t({});
+    expect(tabsToClose({ key: 'k', tabs: [a, b, c] }, 1)).not.toContain(b);
+    expect(otherCopiesToClose({ key: 'k', tabs: [a, b, c] }, a)).toEqual([c]);
+  });
+});

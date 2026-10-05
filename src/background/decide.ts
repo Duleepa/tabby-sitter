@@ -14,11 +14,13 @@ export interface DecideInput {
   manual: boolean;
   /** The tab's opener sits in the tab's current group and the setting is on. */
   keepWithOpener: boolean;
+  /** The tab is half of a Split View pair; regrouping one half would break or fail. */
+  paired?: boolean;
 }
 
 /** Pure decision: what should rules do with this tab? */
 export function decideTabAction(input: DecideInput): TabAction {
-  if (input.manual) return { kind: 'none' };
+  if (input.manual || input.paired) return { kind: 'none' };
 
   const rule = input.rules.find((r) => matchesRule(input.url, r));
   if (rule) {

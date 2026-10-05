@@ -16,12 +16,17 @@ export class ExpectedGroupChanges {
     for (const id of Array.isArray(tabIds) ? tabIds : [tabIds]) this.expiry.set(id, until);
   }
 
-  /** True (once) if a change for this tab was expected and has not expired. */
+  /**
+   * True while a change for this tab is expected. Not single-use: one extension action can produce
+   * several groupId events (a move then a group, a cross-window move, a rule re-run after a redirect),
+   * and every one of them inside the TTL is the extension's own doing.
+   */
   consume(tabId: number): boolean {
     const until = this.expiry.get(tabId);
     if (until === undefined) return false;
+    if (this.now() <= until) return true;
     this.expiry.delete(tabId);
-    return this.now() <= until;
+    return false;
   }
 
   forget(tabId: number): void {

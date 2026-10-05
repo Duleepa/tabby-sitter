@@ -44,41 +44,39 @@ header {
   background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  flex: 1;
-  min-width: 0;
-}
-.brand-icon {
-  width: 22px;
-  height: 22px;
-  border-radius: var(--r-sm);
-  object-fit: contain;
-}
-header h1 {
-  font-size: var(--fs-lg);
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  margin: 0;
-  white-space: nowrap;
-}
 .header-actions {
   display: flex;
   gap: var(--sp-1);
+  flex-shrink: 0;
+}
+button.icon-btn.primary-icon {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+button.icon-btn.primary-icon:hover:not(:disabled) {
+  background: var(--accent-hover);
+  color: var(--text-on-accent);
+}
+button.icon-btn.busy svg {
+  animation: spin 0.8s linear infinite;
 }
 
-/* Status */
+/* Status: a small pill just under the header, right-aligned */
 #status {
   position: absolute;
-  top: 2px;
-  right: var(--sp-2);
+  top: calc(100% + var(--sp-1));
+  right: var(--sp-3);
   z-index: 10;
   font-size: var(--fs-xs);
   color: var(--accent-fg);
-  min-height: 1rem;
   pointer-events: none;
+}
+#status:not(:empty) {
+  padding: 2px var(--sp-2);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--r-full);
+  box-shadow: var(--shadow-sm);
 }
 
 /* Buttons: primary (default) / secondary / outline (ghost) / danger */
@@ -159,10 +157,11 @@ button.icon-btn svg {
 
 /* Section tabs: segmented control */
 .tabs {
-  flex-shrink: 0;
+  flex: 1;
+  min-width: 0;
   display: flex;
   gap: var(--sp-0);
-  margin: var(--sp-2) var(--sp-3) var(--sp-1);
+  margin: 0;
   padding: 3px;
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -183,10 +182,11 @@ button.icon-btn svg {
 }
 .tab-btn.active,
 .tab-btn.active:hover:not(:disabled) {
-  background: var(--surface-raised);
-  color: var(--text);
+  /* Accent tint, not just a lighter grey, so the current section is obvious in both themes. */
+  background: var(--accent-soft);
+  color: var(--accent-fg);
   font-weight: 650;
-  box-shadow: var(--shadow-sm), 0 0 0 1px var(--line);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 /* Panels */
@@ -431,11 +431,13 @@ footer {
   background: var(--surface);
   border-top: 1px solid var(--line);
 }
-footer a {
+footer a,
+.about a {
   color: var(--accent-fg);
   text-decoration: none;
 }
-footer a:hover {
+footer a:hover,
+.about a:hover {
   text-decoration: underline;
 }
 footer .sep {
@@ -480,13 +482,13 @@ footer .sep {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
-  padding: var(--sp-1) var(--sp-3) var(--sp-2);
+  padding: var(--sp-3) var(--sp-3);
 }
 .toolbar input,
 .toolbar select {
   margin: 0;
   width: auto;
-  height: var(--ctl-h-sm);
+  height: var(--ctl-h);
   font-size: var(--fs-sm);
 }
 .toolbar input {
@@ -648,6 +650,7 @@ footer .sep {
   }
 }
 .row .close,
+.row .split-btn,
 .row .more {
   flex-shrink: 0;
   width: 22px;
@@ -663,25 +666,31 @@ footer .sep {
   font-size: 16px;
   line-height: 1;
 }
-.row .close {
-  visibility: hidden;
+/* Row actions take no space until the row is hovered, focused or selected; they then replace the
+   host so the title keeps its width. */
+.row .close,
+.row .split-btn,
+.row .more {
+  display: none;
 }
-.row:hover .close,
-.row:focus-within .close,
-.row.selected .close {
-  visibility: visible;
+.row:hover :is(.close, .split-btn, .more),
+.row:focus-within :is(.close, .split-btn, .more),
+.row.selected :is(.close, .split-btn, .more) {
+  display: inline-flex;
+}
+.row:hover .host,
+.row:focus-within .host,
+.row.selected .host {
+  display: none;
+}
+.row .split-btn .split-icon {
+  display: block;
 }
 .row .close:hover:not(:disabled),
+.row .split-btn:hover:not(:disabled),
 .row .more:hover:not(:disabled) {
   background: var(--pressed);
   color: var(--text);
-}
-.row .more {
-  opacity: 0;
-}
-.row:hover .more,
-.row:focus-within .more {
-  opacity: 1;
 }
 
 /* Pinned */
@@ -775,6 +784,55 @@ footer .sep {
 }
 .group-tabs .tab-row.active::before {
   left: 0;
+}
+
+/* Side-by-side pairs: two rows in one joined container */
+.split-pair {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin: 1px 0;
+  padding-left: 16px;
+  border: 1px solid var(--selected-line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.split-pair > .row {
+  border-radius: 0;
+}
+.split-pair > .row + .row {
+  border-top: 1px solid var(--line);
+}
+.split-pair .split-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-fg);
+  pointer-events: none;
+}
+.split-pair .split-mark .split-icon {
+  width: 12px;
+  height: 12px;
+}
+.group-tabs .split-pair > .tab-row {
+  padding-left: var(--sp-1);
+}
+.split-pair.pin-pair {
+  flex-direction: row;
+  padding-left: 0;
+}
+.split-pair.pin-pair > .row + .row {
+  border-top: 0;
+  border-left: 1px solid var(--line);
+}
+.split-pair.pin-pair .split-mark {
+  display: none;
 }
 
 /* Drop indicators */
@@ -975,7 +1033,7 @@ footer .sep {
 /* Duplicates chip + view */
 .chip {
   flex-shrink: 0;
-  height: 24px;
+  height: var(--ctl-h-sm);
   padding: 0 10px;
   font-size: var(--fs-xs);
   border-radius: var(--r-full);
@@ -1321,8 +1379,52 @@ footer .sep {
 .setting[open] > .setting-head .setting-chevron {
   transform: rotate(45deg);
 }
+.setting-icon {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-md);
+  background: var(--accent-soft);
+  color: var(--accent-fg);
+}
+.about p {
+  margin: 0 0 var(--sp-2);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  color: var(--text-2);
+}
+.about p:last-child {
+  margin-bottom: 0;
+}
+.setting-icon svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
 .setting-body {
   padding: var(--sp-3) var(--sp-4);
+}
+.setting-list {
+  margin: 0 0 var(--sp-2);
+  padding-left: 18px;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+}
+.setting-list li + li {
+  margin-top: var(--sp-1);
+}
+kbd {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
 }
 .setting[open] > .setting-head {
   border-bottom: 1px solid var(--line);
