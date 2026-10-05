@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Tabby Sitter</title>
+    <link rel="stylesheet" href="./theme.css" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -97,8 +98,15 @@ or regex patterns if using Regex mode"></textarea>
     </section>
 
     <section class="tab-panel scroll hidden" id="settingsPanel" role="tabpanel">
-      <article class="card" id="syncCard">
-        <h2>Sync file</h2>
+      <details class="card setting" id="syncCard" data-key="sync" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Sync file</span>
+            <span class="setting-summary" id="syncSummary">Not linked</span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
         <p class="hint">
           Keep rules, settings and saved groups in step across computers with a file in a folder you already sync.
           Tabby Sitter never uploads anything. Your sync service copies the file; see Help.
@@ -152,37 +160,77 @@ or regex patterns if using Regex mode"></textarea>
           <p><strong>Several Chrome profiles?</strong> Each profile has its own copy of the extension, with its own rules, saved groups and linked file. Set a profile name above and “Create sync file…” suggests a matching file name (it stays on this profile and is never written to the file). Give each profile its own file (e.g. tabby-sitter-work.conf.json and tabby-sitter-personal.conf.json) to keep their setups separate, or link the same file in several profiles to share one setup.</p>
           <p><strong>Tip.</strong> Avoid editing on two machines at the same time. If the “Sync file changed on another device” banner appears, choose which side to keep.</p>
         </details>
-      </article>
+      
+        </div>
+      </details>
 
-      <article class="card">
-        <h2>Export Rules</h2>
+      <details class="card setting" data-key="appearance" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Appearance</span>
+            <span class="setting-summary" id="themeSummary"></span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      
+        </div>
+      </details>
+
+      <details class="card setting" data-key="backup" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Import &amp; export</span>
+            <span class="setting-summary" id="exportSummary"></span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
         <p class="hint">
-          Download a config file (rules, settings and saved groups) to back up or move by hand.
+          Back up or move your rules, settings and saved groups by hand with a config file.
+          Importing lets you merge with or replace what you have.
         </p>
-        <button id="exportConfig" class="secondary">Export Rules</button>
-      </article>
+        <div class="card-actions">
+          <button id="exportConfig" class="secondary" type="button">Export…</button>
+          <button id="importConfig" class="secondary" type="button">Import…</button>
+        </div>
+        <input type="file" id="configFileInput" accept=".json" hidden />
+      
+        </div>
+      </details>
 
-      <article class="card">
-        <h2>Import Rules</h2>
-        <p class="hint">
-          Load a previously exported config file. You can merge or replace your rules.
-        </p>
-        <button id="importConfig" class="secondary">Import Rules</button>
-        <input type="file" id="configFileInput" accept=".json" style="display: none" />
-      </article>
-
-      <article class="card">
-        <h2>Starter Config</h2>
+      <details class="card setting" data-key="starter" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Starter Config</span>
+            <span class="setting-summary" id="starterSummary"></span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
         <p class="hint">
           Download an example config file with sample rules.
         </p>
         <button id="createConfig" class="secondary">Create Starter</button>
-      </article>
-
-      <article class="card">
-        <div class="card-header-row">
-          <h2>Duplicate Tabs</h2>
+      
         </div>
+      </details>
+
+      <details class="card setting" data-key="duplicates" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Duplicate Tabs</span>
+            <span class="setting-summary" id="dupSummary"></span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
         <p class="hint">
           Prevent opening the same URL in multiple tabs.
         </p>
@@ -213,22 +261,39 @@ or regex patterns if using Regex mode"></textarea>
         <p class="hint">
           Tracking parameters (<code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, and similar) and <code>#fragments</code> are already ignored. A new duplicate tab is closed and you can undo it; a tab you navigate to a duplicate is never closed, only flagged.
         </p>
-      </article>
+      
+        </div>
+      </details>
 
-      <article class="card">
+      <details class="card setting" data-key="keep-in-group" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Keep tabs in their group</span>
+            <span class="setting-summary" id="keepSummary"></span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
         <div class="card-header-row">
-          <h2>Keep tabs in their group</h2>
-          <label class="toggle-label">
-            <input type="checkbox" class="rule-toggle" id="keepOpenedTabsInGroup" />
-          </label>
+          <label class="toggle-label" for="keepOpenedTabsInGroup">Keep opened tabs in their group</label>
+          <input type="checkbox" class="rule-toggle" id="keepOpenedTabsInGroup" />
         </div>
         <p class="hint">
           Keep tabs opened from a group in that group when no rule matches them. Rules for a different group still win.
         </p>
-      </article>
+      
+        </div>
+      </details>
 
-      <article class="card">
-        <h2>Memory</h2>
+      <details class="card setting" data-key="idle-tabs" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Idle tabs</span>
+            <span class="setting-summary" id="memorySummary"></span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
         <label for="autoDiscardMinutes">Unload tabs idle for</label>
         <select id="autoDiscardMinutes">
           <option value="0">Off</option>
@@ -247,19 +312,29 @@ or regex patterns if using Regex mode"></textarea>
         <p class="hint">
           Unloaded tabs stay in your tab strip and reload when you click them. Unsaved form input in an unloaded tab may be lost. Active, playing-audio and pinned tabs are never unloaded unless you allow pinned tabs.
         </p>
-      </article>
+      
+        </div>
+      </details>
 
-      <article class="card">
+      <details class="card setting" data-key="domain-sorting" name="settings">
+        <summary class="setting-head">
+          <span class="setting-text">
+            <span class="setting-title">Domain Sorting</span>
+            <span class="setting-summary" id="sortSummary"></span>
+          </span>
+          <span class="setting-chevron" aria-hidden="true"></span>
+        </summary>
+        <div class="setting-body">
         <div class="card-header-row">
-          <h2>Domain Sorting</h2>
-          <label class="toggle-label">
-            <input type="checkbox" class="rule-toggle" id="groupUnmatchedByDomain" />
-          </label>
+          <label class="toggle-label" for="groupUnmatchedByDomain">Sort unmatched tabs by domain</label>
+          <input type="checkbox" class="rule-toggle" id="groupUnmatchedByDomain" />
         </div>
         <p class="hint">
           When organizing, tabs that don't match any rule will be sorted alphabetically by domain name.
         </p>
-      </article>
+      
+        </div>
+      </details>
     </section>
 
     <footer>

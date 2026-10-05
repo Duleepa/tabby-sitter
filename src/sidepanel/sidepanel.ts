@@ -1,3 +1,4 @@
+import { applyCachedTheme } from './theme';
 import { showStatus } from './dom';
 import { initSavedView } from './saved-view';
 import { initRulesView } from './rules-view';
@@ -5,6 +6,9 @@ import { initSettingsView } from './settings-view';
 import { initSyncView } from './sync-view';
 import { initDuplicatesView } from './duplicates-view';
 import { initTabsView } from './tabs-view';
+
+// Apply the mirrored theme synchronously, before anything renders.
+applyCachedTheme();
 
 const $ = (id: string) => document.getElementById(id);
 

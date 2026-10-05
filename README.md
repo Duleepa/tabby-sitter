@@ -28,6 +28,7 @@
 - **Saved groups**: Save a group (or a tab selection) from the menu, optionally closing it, and restore it later in this or a new window with its title, colour and tab order. Restored tabs are never auto-closed or regrouped by rules.
 - **Auto-unload**: Optionally unload tabs idle for 15 minutes to 4 hours to free memory (never the active, audible or, by default, pinned tabs; per-domain exceptions).
 - **Tidy**: Sort a group's tabs by site, unload a whole group, or merge same-named groups across windows.
+- **Light and dark themes**: follows your system or can be forced in Settings > Appearance; built on design tokens so new themes are a small CSS override.
 - **Minimal permissions**: `tabs`, `tabGroups`, `storage`, `sidePanel`, `alarms`. No host access, no content scripts.
 - **Organize**: Applies rules to the panel's window; Shift-click organizes all windows.
 - **Rules and Settings** live in the same panel.
@@ -99,7 +100,7 @@ Where to put the file:
 
 Tip: avoid editing on two machines at the same time. If the "Sync file changed on another device" banner appears, pick which side to keep.
 
-**Manual export/import** still works: **Export Rules** downloads the same file format (rules, settings, saved groups), **Import Rules** merges or replaces, and files from older versions (rules only) are accepted. A **Starter Config** with example rules is also available.
+**Manual export/import** still works from the **Import & export** card in Settings. **Export…** downloads the same file format (rules, settings, saved groups), **Import…** merges or replaces, and files from older versions (rules only) are accepted. A **Starter Config** with example rules is also available.
 
 ## Development
 

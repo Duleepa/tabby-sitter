@@ -92,7 +92,7 @@ function card(g: SavedGroup): HTMLElement {
   const head = el('div', 'saved-head');
   const toggle = el('button', 'saved-toggle', { type: 'button', 'aria-expanded': String(open) });
   const dot = el('span', 'dot', { 'aria-hidden': 'true' });
-  dot.style.setProperty('--gc', `var(--color-${color})`);
+  dot.style.setProperty('--gc', `var(--group-${color})`);
   const title = el('span', 'saved-title', undefined, g.title);
   toggle.append(
     el('span', `chevron${open ? '' : ' collapsed'}`, { 'aria-hidden': 'true' }, '▾'),

@@ -442,6 +442,9 @@ function scheduleBadgeUpdate(): void {
   }, 300);
 }
 
+/** Badge background: the theme accent (indigo) as a hex, since the badge cannot use CSS tokens. */
+const BADGE_COLOR = '#4f46e5';
+
 async function updateBadge(): Promise<void> {
   const settings = await getSettings();
   if (!settings.duplicateBadge) {
@@ -451,7 +454,7 @@ async function updateBadge(): Promise<void> {
   const count = duplicateCount(
     findDuplicateClusters(await chrome.tabs.query({}), parseIgnoreParams(settings.duplicateIgnoreParams))
   );
-  await chrome.action.setBadgeBackgroundColor({ color: '#64748b' });
+  await chrome.action.setBadgeBackgroundColor({ color: BADGE_COLOR });
   await chrome.action.setBadgeText({ text: count === 0 ? '' : count > 99 ? '99+' : String(count) });
 }
 

@@ -75,6 +75,8 @@ describe('parseSyncFile', () => {
     });
     const bad = parseSyncFile(wrap({ rules: [], settings: { duplicateTabMode: 'sometimes', autoDiscardMinutes: -5 } }));
     expect(bad.content.settings).toEqual({});
+    expect(parseSyncFile(wrap({ rules: [], settings: { theme: 'dark' } })).content.settings).toEqual({ theme: 'dark' });
+    expect(parseSyncFile(wrap({ rules: [], settings: { theme: 'neon' } })).content.settings).toEqual({});
     expect(() => parseSyncFile(wrap({ rules: [], settings: [] }))).toThrow(/settings must be an object/);
   });
 
