@@ -340,6 +340,17 @@ function statusText(): string {
   return parts.join(' · ');
 }
 
+function summaryText(): string {
+  if (!state) return 'Not linked';
+  // Status first: it is what matters and the line is ellipsised in a narrow panel.
+  let status = 'In sync';
+  if (busy) status = 'Syncing…';
+  else if (problem?.kind === 'error') status = 'Problem';
+  else if (problem?.kind === 'conflict') status = 'Changed elsewhere';
+  else if (state.pending) status = 'Reconnect needed';
+  return [status, state.profileLabel, state.name].filter(Boolean).join(' · ');
+}
+
 function noticeRow(kind: string, text: string, buttons: [string, () => void][]): HTMLElement {
   const row = el('div', `notice ${kind}`, { role: 'status' });
   row.append(el('span', 'notice-text', undefined, text));
@@ -389,6 +400,8 @@ function render(): void {
   $('syncReconnect')?.classList.toggle('hidden', !state?.pending);
   const status = $('syncStatus');
   if (status) status.textContent = linked ? statusText() : 'Not linked';
+  const summary = $('syncSummary');
+  if (summary) summary.textContent = summaryText();
   const label = labelInput();
   if (state && label && document.activeElement !== label) label.value = state.profileLabel;
   if (state) {
@@ -412,6 +425,8 @@ function bindToggle(id: string, key: 'includeSavedGroups' | 'includeSettings' | 
 export async function initSyncView(): Promise<void> {
   if (!fileLinkSupported()) {
     $('syncUnsupported')?.classList.remove('hidden');
+    const summary = $('syncSummary');
+    if (summary) summary.textContent = 'Not available in this browser';
     $('syncUnlinked')?.classList.add('hidden');
     return;
   }
@@ -440,6 +455,8 @@ export async function initSyncView(): Promise<void> {
     if (document.visibilityState === 'visible') void runSync();
   });
 
+  state = await getSyncState();
+  render(); // show the stored status before the file handle (IndexedDB) is loaded
   await refreshState();
   render();
   await runSync();

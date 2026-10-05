@@ -131,7 +131,18 @@ export function downloadStarterConfig(): void {
 
 export type DuplicateTabMode = 'allow' | 'prevent-all' | 'prevent-specific';
 
+export const THEMES = ['system', 'light', 'dark'] as const;
+export type ThemeSetting = (typeof THEMES)[number];
+
+/** Whitelist a theme value from storage or an imported file; anything unknown is 'system'. */
+export function normalizeTheme(value: unknown): ThemeSetting {
+  return typeof value === 'string' && (THEMES as readonly string[]).includes(value)
+    ? (value as ThemeSetting)
+    : 'system';
+}
+
 export interface ExtensionSettings {
+  theme: ThemeSetting;
   groupUnmatchedByDomain: boolean;
   duplicateTabMode: DuplicateTabMode;
   duplicateTabDomains: string;
@@ -145,6 +156,7 @@ export interface ExtensionSettings {
 }
 
 export const DEFAULT_SETTINGS: ExtensionSettings = {
+  theme: 'system',
   groupUnmatchedByDomain: false,
   duplicateTabMode: 'allow',
   duplicateTabDomains: '',
@@ -159,7 +171,9 @@ export const DEFAULT_SETTINGS: ExtensionSettings = {
 
 export async function getSettings(): Promise<ExtensionSettings> {
   const result = await chrome.storage.local.get('settings');
-  return { ...DEFAULT_SETTINGS, ...(result.settings as Partial<ExtensionSettings>) };
+  const merged = { ...DEFAULT_SETTINGS, ...(result.settings as Partial<ExtensionSettings>) };
+  merged.theme = normalizeTheme(merged.theme);
+  return merged;
 }
 
 export async function saveSettings(settings: ExtensionSettings): Promise<void> {

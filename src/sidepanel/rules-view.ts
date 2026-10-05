@@ -51,7 +51,7 @@ function renderRules(rules: GroupRule[]) {
     <div class="rule-item${r.enabled === false ? ' rule-disabled' : ''}" data-id="${escapeHtml(r.id)}">
       <div class="rule-info">
         <div class="rule-header">
-          <span class="rule-pill" style="background-color: var(--color-${safeColor(r.color)}); color: #fff;">${escapeHtml(r.groupName)}</span>
+          <span class="rule-pill" style="--gc: var(--group-${safeColor(r.color)})">${escapeHtml(r.groupName)}</span>
           ${r.description ? '<span class="rule-desc">' + escapeHtml(r.description) + '</span>' : ''}
         </div>
         <div class="rule-meta">

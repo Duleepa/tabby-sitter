@@ -1,0 +1,133 @@
+/*
+ * Tabby Sitter theme tokens: the ONLY place colour values live.
+ * styles.css must use these tokens exclusively (enforced by theme.test.ts).
+ *
+ * Mechanics
+ *   - Every colour token is defined once with light-dark(<light>, <dark>), which follows the
+ *     `color-scheme` of the element (Chrome 123+; see minimum_chrome_version).
+ *   - <html> carries no data-theme  -> follow the OS (color-scheme: light dark)
+ *     <html data-theme="light">     -> force light
+ *     <html data-theme="dark">      -> force dark
+ *
+ * Adding a theme
+ *   Add a block `:root[data-theme="<name>"] { color-scheme: light|dark; --accent: ...; ... }`
+ *   that overrides tokens only (accent-soft, selected, ring, etc. derive from --accent / surfaces).
+ *   Then allow the name in the `theme` setting (storage/config.ts) and the Appearance select.
+ *
+ * Token contract
+ *   Surfaces      --bg --surface --surface-2 --surface-raised --overlay
+ *   Text          --text --text-2 --text-3 --text-on-accent
+ *   Lines         --line --line-strong
+ *   Interaction   --hover --pressed --selected --selected-line --ring
+ *   Accent        --accent --accent-hover --accent-fg --accent-soft
+ *   Status        --danger --warn --success --info (+ -soft each)
+ *   Misc colour   --switch-knob --shadow-color
+ *   Group colours --group-grey|blue|red|yellow|green|pink|purple|cyan|orange (Chrome's palette)
+ *   Radii         --r-sm --r-md --r-lg --r-full
+ *   Spacing       --sp-0 --sp-1 --sp-2 --sp-3 --sp-4 --sp-5
+ *   Type          --font --font-mono --fs-xs --fs-sm --fs-md --fs-lg
+ *   Sizes         --row-h --ctl-h --ctl-h-sm
+ *   Motion        --ease --dur
+ *   Shadows       --shadow-sm --shadow-md --shadow-lg
+ */
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces: layered, neutral zinc greys; dark mode is near-black. */
+  --bg: light-dark(#fafafa, #09090b);
+  --surface: light-dark(#ffffff, #121214);
+  --surface-2: light-dark(#f4f4f5, #1c1c20);
+  --surface-raised: light-dark(#ffffff, #232328);
+  --overlay: light-dark(#18181b, #000000);
+
+  /* Text */
+  --text: light-dark(#18181b, #fafafa);
+  --text-2: light-dark(#52525b, #a1a1aa);
+  --text-3: light-dark(#6b6b74, #8b8b94);
+  --text-on-accent: light-dark(#ffffff, #14142b);
+
+  /* Lines */
+  --line: light-dark(#e4e4e7, #27272a);
+  --line-strong: light-dark(#d4d4d8, #3f3f46);
+
+  /* Accent: indigo / violet */
+  --accent: light-dark(#4f46e5, #818cf8);
+  --accent-hover: light-dark(#4338ca, #a5b4fc);
+  --accent-fg: light-dark(#4338ca, #a5b4fc);
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, var(--surface));
+
+  /* Interaction */
+  --hover: color-mix(in srgb, var(--text) 6%, transparent);
+  --pressed: color-mix(in srgb, var(--text) 11%, transparent);
+  --selected: color-mix(in srgb, var(--accent) 18%, var(--surface));
+  --selected-line: color-mix(in srgb, var(--accent) 55%, transparent);
+  --ring: var(--accent);
+
+  /* Status */
+  --danger: light-dark(#b91c1c, #f87171);
+  --danger-soft: color-mix(in srgb, var(--danger) 13%, var(--surface));
+  --warn: light-dark(#8f4f06, #fbbf24);
+  --warn-soft: color-mix(in srgb, var(--warn) 15%, var(--surface));
+  --success: light-dark(#166534, #4ade80);
+  --success-soft: color-mix(in srgb, var(--success) 13%, var(--surface));
+  --info: light-dark(#0369a1, #38bdf8);
+  --info-soft: color-mix(in srgb, var(--info) 13%, var(--surface));
+
+  --switch-knob: light-dark(#ffffff, #fafafa);
+  --shadow-color: light-dark(#18181b, #000000);
+
+  /* Chrome tab-group palette (matches the tab strip) */
+  --group-grey: light-dark(#5f6368, #dadce0);
+  --group-blue: light-dark(#1a73e8, #8ab4f8);
+  --group-red: light-dark(#d93025, #f28b82);
+  --group-yellow: light-dark(#e37400, #fdd663);
+  --group-green: light-dark(#188038, #81c995);
+  --group-pink: light-dark(#d01884, #ff8bcb);
+  --group-purple: light-dark(#a142f4, #c58af9);
+  --group-cyan: light-dark(#007b83, #78d9ec);
+  --group-orange: light-dark(#fa903e, #fcad70);
+
+  /* Radii */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-full: 999px;
+
+  /* Spacing */
+  --sp-0: 2px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+
+  /* Type: system stack only, no web fonts */
+  --font: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-lg: 15px;
+
+  /* Sizes */
+  --row-h: 30px;
+  --ctl-h: 32px;
+  --ctl-h-sm: 28px;
+
+  /* Motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur: 140ms;
+
+  /* Shadows, composed from --shadow-color */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, var(--shadow-color) 8%, transparent);
+  --shadow-md: 0 4px 12px color-mix(in srgb, var(--shadow-color) 12%, transparent);
+  --shadow-lg: 0 10px 30px color-mix(in srgb, var(--shadow-color) 22%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--shadow-color) 6%, transparent);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}

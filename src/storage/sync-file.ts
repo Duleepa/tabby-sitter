@@ -1,4 +1,4 @@
-import { DEFAULT_SETTINGS, type ExtensionSettings } from './config';
+import { DEFAULT_SETTINGS, THEMES, type ExtensionSettings } from './config';
 import type { GroupColor, GroupRule, MatchMode } from './rules';
 import { isSavableUrl, type SavedGroup, type SavedTab } from './saved-groups';
 import { generateId } from '../utils/id';
@@ -148,6 +148,7 @@ export function normalizeSettings(raw: Record<string, unknown>): Partial<Extensi
     const value = raw[key];
     if (typeof value !== typeof DEFAULT_SETTINGS[key]) continue;
     if (key === 'duplicateTabMode' && !DUPLICATE_MODES.has(value as string)) continue;
+    if (key === 'theme' && !(THEMES as readonly string[]).includes(value as string)) continue;
     if (typeof value === 'number' && (!Number.isFinite(value) || value < 0)) continue;
     out[key] = value;
   }

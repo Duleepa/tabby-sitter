@@ -108,7 +108,7 @@ function renderItems(items: MenuItem[], container: HTMLElement): void {
           title: color,
           'aria-label': color,
         });
-        b.style.setProperty('--swatch', `var(--color-${color})`);
+        b.style.setProperty('--swatch', `var(--group-${color})`);
         b.addEventListener('click', () => {
           closeMenu();
           item.onPick(color);

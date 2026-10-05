@@ -3,17 +3,22 @@ import {
   importConfigFile,
   downloadStarterConfig,
   getSettings,
+  normalizeTheme,
   saveSettings,
   type DuplicateTabMode,
   type ExtensionSettings,
 } from '../storage/config';
 import { showStatus } from './dom';
 import { refreshRules } from './rules-view';
+import { setTheme } from './theme';
+import { SETTINGS_OPEN_KEY, settingSummaries } from './setting-summaries';
 
 const $ = (id: string) => document.getElementById(id);
 
 /** Fill the controls from stored settings (also used when a sync file or import changes them). */
 function populate(settings: ExtensionSettings): void {
+  ($('theme') as HTMLSelectElement).value = settings.theme;
+  setTheme(settings.theme);
   ($('groupUnmatchedByDomain') as HTMLInputElement).checked = settings.groupUnmatchedByDomain;
   ($('duplicateBadge') as HTMLInputElement).checked = settings.duplicateBadge;
   ($('duplicateIgnoreParams') as HTMLInputElement).value = settings.duplicateIgnoreParams;
@@ -26,9 +31,46 @@ function populate(settings: ExtensionSettings): void {
   ($('duplicateTabConfirm') as HTMLInputElement).checked = settings.duplicateTabConfirm;
   ($('duplicateDomainsGroup') as HTMLElement).style.display =
     settings.duplicateTabMode === 'prevent-specific' ? '' : 'none';
+
+  const discard = $('autoDiscardMinutes') as HTMLSelectElement;
+  const sum = settingSummaries(settings, discard.selectedOptions[0]?.text);
+  const set = (id: string, text: string) => {
+    const node = $(id);
+    if (node) node.textContent = text;
+  };
+  set('themeSummary', sum.theme);
+  set('dupSummary', sum.duplicates);
+  set('keepSummary', sum.keep);
+  set('memorySummary', sum.memory);
+  set('sortSummary', sum.sort);
+  set('exportSummary', 'Back up or move your setup by hand');
+  set('starterSummary', 'Example rules to start from');
+}
+
+/** Exclusive accordion (native `name`); remembers the open card in localStorage. */
+function initAccordion(): void {
+  const cards = Array.from(document.querySelectorAll<HTMLDetailsElement>('#settingsPanel details.setting'));
+  let saved: string | null = null;
+  try {
+    saved = localStorage.getItem(SETTINGS_OPEN_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+  cards.forEach((card) => {
+    if (saved && card.dataset.key === saved) card.open = true;
+    card.addEventListener('toggle', () => {
+      try {
+        if (card.open) localStorage.setItem(SETTINGS_OPEN_KEY, card.dataset.key ?? '');
+        else if (localStorage.getItem(SETTINGS_OPEN_KEY) === card.dataset.key) localStorage.removeItem(SETTINGS_OPEN_KEY);
+      } catch {
+        /* storage unavailable */
+      }
+    });
+  });
 }
 
 export async function initSettingsView() {
+  initAccordion();
   // Config file actions
   $('exportConfig')?.addEventListener('click', async () => {
     try {
@@ -72,6 +114,15 @@ export async function initSettingsView() {
   populate(await getSettings());
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) getSettings().then(populate, () => undefined);
+  });
+
+  const themeSelect = $('theme') as HTMLSelectElement;
+  themeSelect.addEventListener('change', async () => {
+    const theme = normalizeTheme(themeSelect.value);
+    setTheme(theme);
+    const current = await getSettings();
+    current.theme = theme;
+    await saveSettings(current);
   });
 
   $('groupUnmatchedByDomain')?.addEventListener('change', async () => {

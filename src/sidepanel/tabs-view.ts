@@ -115,7 +115,7 @@ function toggleGroup(groupId: number): void {
 
 const isGroupColor = (c: string): c is (typeof GROUP_COLORS)[number] =>
   (GROUP_COLORS as readonly string[]).includes(c);
-const colorVar = (c: string) => `var(--color-${isGroupColor(c) ? c : 'grey'})`;
+const colorVar = (c: string) => `var(--group-${isGroupColor(c) ? c : 'grey'})`;
 
 function fail(err: unknown): void {
   console.error('[Sidepanel]', err);
@@ -190,10 +190,21 @@ function safeFavicon(tab: chrome.tabs.Tab): string | null {
   return u && /^(https?:|data:)/i.test(u) ? u : null;
 }
 
+/** First letter of the site (without www.), or a dot for pages without a host. */
+function monogram(tab: chrome.tabs.Tab): string {
+  try {
+    const host = new URL(tab.url || tab.pendingUrl || '').hostname.replace(/^www\./, '');
+    return host ? host[0].toUpperCase() : '•';
+  } catch {
+    return '•';
+  }
+}
+
 function faviconEl(tab: chrome.tabs.Tab): HTMLElement {
   const src = safeFavicon(tab);
   const wrap = el('span', `favicon${tab.status === 'loading' ? ' loading' : ''}`);
   if (tab.status === 'loading') return wrap;
+  wrap.dataset.letter = monogram(tab); // shown by CSS when there is no icon (or it fails to load)
   if (src) {
     const img = el('img', undefined, { alt: '', draggable: 'false' });
     img.addEventListener('error', () => img.remove());

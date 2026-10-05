@@ -21,6 +21,14 @@ It auto-organizes browser tabs into tab groups based on user-defined URL pattern
 
 Saved groups restore through the background (`restoreSavedGroup`) inside a quiet window; restored tabs are also marked manual and allowed as duplicates. An alarm `auto-discard` (every 5 min) unloads idle tabs via `pickTabsToDiscard`; it is reconciled idempotently at SW start, install, startup and every settings change. Group menu actions: Save group, Save & close, Unload group, Sort tabs by site, Merge groups named "X" here (reuses `applyDrop` with a group "into" target).
 
+## Theming
+
+- Tokens live in `src/sidepanel/theme.css` (documented contract at the top): surfaces, text, lines, interaction, accent, status, `--group-<name>` (Chrome's tab-group palette), radii, spacing, type, motion, shadows. It is the only place colour values may appear.
+- `src/sidepanel/styles.css` must use tokens only; `src/sidepanel/theme.test.ts` fails on hex/`rgb(`/`hsl(`/named colours (allowed: `transparent`, `currentColor`, `inherit`, `var(...)`). No colour literals in TS either: set `--gc: var(--group-X)` and style in CSS. The toolbar badge hex (`BADGE_COLOR` in background.ts) mirrors `--accent` and is the one deliberate exception.
+- Light/dark uses `light-dark()` + `color-scheme` (hence `minimum_chrome_version` 123). `<html data-theme>` absent = follow system; `light`/`dark` forces it.
+- Add a theme: a `:root[data-theme="<name>"]` block in theme.css overriding tokens (+ `color-scheme`), then add the name to `THEMES` in `src/storage/config.ts` and an option in the Appearance select.
+- Setting key: `settings.theme` (`'system' | 'light' | 'dark'`, `normalizeTheme` whitelists it). `src/sidepanel/theme.ts` applies it and mirrors it to `localStorage` so `sidepanel.ts` can apply it synchronously on open.
+
 ## Duplicate handling
 
 Order in `handleDuplicateTab`: fresh vs non-fresh (consumed once) -> startup grace -> mode/domain gate -> `allowOnce` / `allowedDuplicateTabs` -> pick existing tab (same window first, then most recently accessed). Only a *fresh* tab with "Ask before closing" off is closed (with an Undo notice); every other duplicate is only *flagged*. Navigated tabs are never closed. The toolbar badge shows `duplicateCount` (debounced `setTimeout`, never `setInterval`).
@@ -35,7 +43,7 @@ Tabs the user places by hand (side panel drag/drop and group menu actions, or a 
 
 ### Local storage keys (`chrome.storage.local`)
 - `syncFile` (`SyncFileState`: name, profileLabel (local only, never in the file), include flags, autoLoad, lastHash, lastSeen, lastWriteAt, pending), `syncDeviceId` (per profile)
-- `rules`, `settings` (incl. `autoDiscardMinutes`, `autoDiscardPinned`, `autoDiscardExceptDomains`), `savedGroups` (`SavedGroup[]`: title, colour, tab URLs/titles; no favicons)
+- `rules`, `settings` (incl. `theme`, `autoDiscardMinutes`, `autoDiscardPinned`, `autoDiscardExceptDomains`), `savedGroups` (`SavedGroup[]`: title, colour, tab URLs/titles; no favicons)
 
 ### Session storage keys (`chrome.storage.session`)
 - `freshTabs`: tabId → creation time, consumed on first real-URL evaluation (duplicate handling)
@@ -81,7 +89,9 @@ src/
 | `src/sidepanel/drop.ts` | Pure: `computeDrop` (tab drags) and `computeGroupMove` (group drags). Unit-tested. |
 | `src/sidepanel/tab-actions.ts` | `chrome.tabs`/`tabGroups` mutations (move, group, ungroup, pin, discard, close) wrapped in `retryTabMutation`. |
 | `src/sidepanel/context-menu.ts` | Custom in-panel menu (items, submenus, inline input, color swatches). |
+| `src/sidepanel/theme.css` / `theme.ts` | Token contract (all colours) and theme apply/cache helpers; see Theming. |
 | `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export/starter config, duplicate-tab (mode, ask first, toolbar badge, extra ignored params), keep-in-group and domain-sorting settings. |
+| `src/sidepanel/setting-summaries.ts` | Pure `settingSummaries(settings, discardLabel)`: the one-line state under each Settings card. Settings tab is an exclusive accordion (`<details class="card setting" name="settings">`); the open card is remembered in `localStorage` key `settingsOpen`. |
 | `src/background/decide.ts` | Pure `decideTabAction({ url, rules, currentGroupTitle, manual, keepWithOpener })` → group / ungroup / none. Used by both `processTab` and `organizeAllTabs`. |
 | `src/background/expected-changes.ts` | `ExpectedGroupChanges`: tab ids whose group change the extension itself is causing (3 s TTL, injectable clock). |
 | `src/storage/overrides.ts` | Manual overrides (`getOverrides`, `isOverridden`, `addOverrides`, `clearOverrides`) in `chrome.storage.session`; per-call read-modify-write, cache invalidated by `storage.onChanged`. |
@@ -194,9 +204,9 @@ interface ConfigFile {
 ```
 
 **Workflow:**
-1. Add rules in the side panel (Rules tab) → click **Export Rules**
+1. Add rules in the side panel (Rules tab) → click **Export…** (Settings → Import & export)
 2. Save `tabby-sitter.conf.json` to a synced folder (e.g. Dropbox, Obsidian vault, iCloud)
-3. On another machine, click **Import Rules** and pick the synced file
+3. On another machine, click **Import…** and pick the synced file
 
 **Starter Config:** The Settings tab also offers a "Create Starter Config" button that downloads a pre-populated config with example rules.
 
