@@ -49,6 +49,11 @@ async function write(groups: SavedGroup[]): Promise<void> {
   await chrome.storage.local.set({ [KEY]: groups });
 }
 
+/** Replace the whole list (sync apply, undo, import). */
+export async function replaceAllSavedGroups(groups: SavedGroup[]): Promise<void> {
+  await write(groups);
+}
+
 export async function saveGroup(group: SavedGroup): Promise<void> {
   const groups = (await listSavedGroups()).filter((g) => g.id !== group.id);
   groups.push(group);
