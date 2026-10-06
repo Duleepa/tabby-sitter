@@ -52,6 +52,7 @@
       <div class="rules-head">
         <button id="showAddRule" class="small" aria-expanded="false" aria-controls="addRulePanel">＋ Add rule</button>
       </div>
+      <div id="rulesToast" class="toast" role="status" aria-live="polite"></div>
       <article class="card hidden" id="addRulePanel">
         <h2>New rule</h2>
         <label for="patterns">Patterns</label>
@@ -232,16 +233,16 @@ or regex patterns if using Regex mode"></textarea>
         <summary class="setting-head">
           <span class="setting-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.7 4.7 1.8-4.7 1.8L12 16l-1.8-4.7-4.7-1.8 4.7-1.8z"/><path d="M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z"/></svg></span>
           <span class="setting-text">
-            <span class="setting-title">Starter Config</span>
+            <span class="setting-title">Example rules</span>
             <span class="setting-summary" id="starterSummary"></span>
           </span>
           <span class="setting-chevron" aria-hidden="true"></span>
         </summary>
         <div class="setting-body">
         <p class="hint">
-          Download an example config file with sample rules.
+          Adds rules for Dev, Docs, Mail, Media and Social to your rules (any group you already have a rule for is skipped). New tabs follow them right away; open tabs move when you Organize.
         </p>
-        <button id="createConfig" class="secondary">Create Starter</button>
+        <button id="addExampleRules" class="secondary" type="button">Add example rules</button>
       
         </div>
       </details>

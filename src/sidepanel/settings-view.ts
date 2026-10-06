@@ -1,7 +1,6 @@
 import {
   exportConfigFile,
   importConfigFile,
-  downloadStarterConfig,
   getSettings,
   normalizeTheme,
   saveSettings,
@@ -9,7 +8,7 @@ import {
   type ExtensionSettings,
 } from '../storage/config';
 import { showStatus } from './dom';
-import { refreshRules } from './rules-view';
+import { addExampleRules, refreshRules } from './rules-view';
 import { setTheme } from './theme';
 import { chromeMajor, SPLIT_MIN_CHROME, splitAvailabilityText, splitSupported } from '../utils/split';
 import { SETTINGS_OPEN_KEY, settingSummaries } from './setting-summaries';
@@ -45,7 +44,7 @@ function populate(settings: ExtensionSettings): void {
   set('memorySummary', sum.memory);
   set('sortSummary', sum.sort);
   set('exportSummary', 'Back up or move your setup by hand');
-  set('starterSummary', 'Example rules to start from');
+  set('starterSummary', 'Dev, Docs, Mail, Media and Social, ready to edit');
 }
 
 /** Exclusive accordion (native `name`); remembers the open card in localStorage. */
@@ -124,9 +123,10 @@ export async function initSettingsView() {
     }
   });
 
-  $('createConfig')?.addEventListener('click', () => {
-    downloadStarterConfig();
-    showStatus('Starter config downloaded!');
+  $('addExampleRules')?.addEventListener('click', () => {
+    // Show the Rules tab so the result and its Undo are visible.
+    document.querySelector<HTMLElement>('.tab-btn[data-tab="rules"]')?.click();
+    addExampleRules().catch((err) => showStatus('Could not add example rules: ' + String(err)));
   });
 
   // Load and save domain grouping setting

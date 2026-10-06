@@ -82,7 +82,8 @@ src/
 |------|--------------|
 | `src/background/background.ts` | Listens to `chrome.tabs.onUpdated` and `onCreated`, matches URLs against rules, moves/creates tab groups. Exposes `organizeAllTabs()` via message passing. Includes retry logic for transient Chrome tab mutation errors. |
 | `src/storage/rules.ts` | CRUD for grouping rules via `chrome.storage.local`. Supports multiple patterns per rule and `contains`/`regex` match modes. |
-| `src/storage/config.ts` | Import/export of the shared config format (rules, settings, saved groups; v0.2 rules-only files still import), `readLocalContent`/`applyContent`, `DEFAULT_SETTINGS`, starter config. |
+| `src/storage/config.ts` | Import/export of the shared config format (rules, settings, saved groups; v0.2 rules-only files still import), `readLocalContent`/`applyContent`, `DEFAULT_SETTINGS`. |
+| `src/storage/starter-rules.ts` | `STARTER_RULES` (domain mode) and pure `newStarterRules` (skips group names already in use); `addStarterRules` / `removeRulesById` (Undo). Never added automatically: offered on the empty Rules tab and the Settings "Example rules" card. |
 | `src/storage/sync-file.ts` | Pure: v0.3 format (`buildSyncFile`, `parseSyncFile` with validation, `syncContent`), `contentHash` (canonical JSON + FNV-1a), `decideSync`, `suggestedSyncFileName`. Unit-tested. |
 | `src/storage/sync-state.ts` | `syncFile` state and `syncDeviceId` in `chrome.storage.local`. |
 | `src/sidepanel/file-link.ts` | File System Access pickers, permission, read/write and IndexedDB handle storage. |
@@ -94,7 +95,7 @@ src/
 | `src/sidepanel/tab-actions.ts` | `chrome.tabs`/`tabGroups` mutations (move, group, ungroup, pin, discard, close) wrapped in `retryTabMutation`. |
 | `src/sidepanel/context-menu.ts` | Custom in-panel menu (items, submenus, inline input, color swatches). |
 | `src/sidepanel/theme.css` / `theme.ts` | Token contract (all colours) and theme apply/cache helpers; see Theming. |
-| `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export/starter config, duplicate-tab (mode, ask first, toolbar badge, extra ignored params), keep-in-group and domain-sorting settings. |
+| `src/sidepanel/rules-view.ts` / `settings-view.ts` | Rules list + add/edit form; import/export, example rules (empty state + toast with Organize/Undo), duplicate-tab (mode, ask first, toolbar badge, extra ignored params), keep-in-group and domain-sorting settings. |
 | `src/sidepanel/setting-summaries.ts` | Pure `settingSummaries(settings, discardLabel)`: the one-line state under each Settings card. Settings tab is an exclusive accordion (`<details class="card setting" name="settings">`); the open card is remembered in `localStorage` key `settingsOpen`. |
 | `src/background/decide.ts` | Pure `decideTabAction({ url, rules, currentGroupTitle, manual, keepWithOpener })` → group / ungroup / none. Used by both `processTab` and `organizeAllTabs`. |
 | `src/background/expected-changes.ts` | `ExpectedGroupChanges`: tab ids whose group change the extension itself is causing (3 s TTL, injectable clock). Not single-use: every groupId event inside the TTL counts as expected (one action can emit several). `processTab` runs are serialised per tab (`tabRuns`). |
@@ -213,7 +214,7 @@ interface ConfigFile {
 2. Save `tabby-sitter.conf.json` to a synced folder (e.g. Dropbox, Obsidian vault, iCloud)
 3. On another machine, click **Import…** and pick the synced file
 
-**Starter Config:** The Settings tab also offers a "Create Starter Config" button that downloads a pre-populated config with example rules.
+**Example rules:** Nothing is pre-loaded on install (it would regroup tabs the user didn't ask about and clash with linking an existing sync file). The empty Rules tab and Settings → Example rules offer one-click domain rules (Dev, Docs, Mail, Media, Social) with Undo; open tabs only move when the user organizes.
 
 **Safety:** Imported files are capped at 5 MB. Regex patterns are capped at 5000 characters.
 

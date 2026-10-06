@@ -9,7 +9,8 @@ import {
   type GroupRule,
   type MatchMode,
 } from '../storage/rules';
-import { showStatus } from './dom';
+import { addStarterRules, removeRulesById, STARTER_RULES } from '../storage/starter-rules';
+import { el, showStatus } from './dom';
 import { GROUP_COLORS } from './tab-tree';
 
 const $ = (id: string) => document.getElementById(id);
@@ -41,7 +42,12 @@ function renderRules(rules: GroupRule[]) {
   if (!list) return;
 
   if (rules.length === 0) {
-    list.innerHTML = '<div class="empty">No rules yet. Click “Add rule” to create one.</div>';
+    const names = STARTER_RULES.map((r) => r.groupName).join(', ');
+    list.innerHTML = `
+      <div class="empty rules-empty">
+        <p>No rules yet. Start with a few examples (${escapeHtml(names)}) and edit them to suit you, or click “Add rule”.</p>
+        <button type="button" class="secondary" data-starter>Add example rules</button>
+      </div>`;
     return;
   }
 
@@ -128,6 +134,47 @@ export async function refreshRules() {
 
 const refresh = refreshRules;
 
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+function clearToast(): void {
+  clearTimeout(toastTimer);
+  $('rulesToast')?.replaceChildren();
+}
+
+/** Toast after adding example rules: Organize applies them to open tabs, Undo removes them. */
+function showStarterToast(added: GroupRule[]): void {
+  const toast = $('rulesToast');
+  if (!toast) return;
+  clearTimeout(toastTimer);
+  const organize = el('button', 'toast-btn', { type: 'button' }, 'Organize tabs');
+  organize.addEventListener('click', () => {
+    clearToast();
+    $('organizeTabs')?.click();
+  });
+  const undo = el('button', 'toast-btn', { type: 'button' }, 'Undo');
+  undo.addEventListener('click', () => {
+    clearToast();
+    removeRulesById(added.map((r) => r.id))
+      .then(refresh)
+      .then(() => showStatus('Example rules removed'))
+      .catch((err) => showStatus('Undo failed: ' + String(err)));
+  });
+  const text = `Added ${added.length} example rule${added.length === 1 ? '' : 's'}`;
+  toast.replaceChildren(el('span', 'toast-text', undefined, text), organize, undo);
+  toastTimer = setTimeout(clearToast, 10000);
+}
+
+/** Add the missing example rules (used by the empty state and the Settings card). New tabs follow them; open tabs move only on Organize. */
+export async function addExampleRules(): Promise<void> {
+  const added = await addStarterRules();
+  await refresh();
+  if (added.length === 0) {
+    showStatus('You already have rules for all the example groups');
+    return;
+  }
+  showStarterToast(added);
+}
+
 function toggleAddForm(show: boolean) {
   $('addRulePanel')?.classList.toggle('hidden', !show);
   $('showAddRule')?.setAttribute('aria-expanded', String(show));
@@ -145,6 +192,11 @@ export async function initRulesView() {
   // Event delegation for rule list actions
   $('rulesList')?.addEventListener('click', async (e) => {
     const target = e.target as HTMLElement;
+
+    if (target.closest('[data-starter]')) {
+      await addExampleRules();
+      return;
+    }
 
     // Remove button
     const removeBtn = target.closest('[data-remove]');

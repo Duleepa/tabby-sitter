@@ -2,7 +2,6 @@ import { getRules, saveRules, type GroupRule } from './rules';
 import { listSavedGroups, replaceAllSavedGroups } from './saved-groups';
 import { getDeviceId } from './sync-state';
 import { buildSyncFile, parseSyncFile, type SyncContent, type SyncFile } from './sync-file';
-import { generateId } from '../utils/id';
 
 export type ConfigFile = SyncFile;
 
@@ -70,63 +69,6 @@ export async function importConfigFile(file: File, mode: 'replace' | 'merge' = '
   }
   await applyContent(next);
   return rules;
-}
-
-/**
- * Create a fresh config file with a starter template.
- */
-export function createStarterConfig(): ConfigFile {
-  return buildSyncFile({
-      rules: [
-        {
-          id: generateId(),
-          patterns: ['github.com', 'stackoverflow.com'],
-          groupName: 'Dev',
-          description: 'GitHub repos and Stack Overflow',
-          color: 'blue',
-          matchMode: 'contains',
-        },
-        {
-          id: generateId(),
-          patterns: ['docs.google.com'],
-          groupName: 'Docs',
-          description: 'Google Docs',
-          color: 'green',
-          matchMode: 'contains',
-        },
-        {
-          id: generateId(),
-          patterns: ['mail.google.com'],
-          groupName: 'Comms',
-          description: 'Gmail',
-          color: 'red',
-          matchMode: 'contains',
-        },
-        {
-          id: generateId(),
-          patterns: ['youtube.com', 'www.youtube.com'],
-          groupName: 'Media',
-          description: 'YouTube videos',
-          color: 'purple',
-          matchMode: 'contains',
-        },
-        {
-          id: generateId(),
-          patterns: ['x.com', 'twitter.com', 'instagram.com'],
-          groupName: 'Social',
-          description: 'Social media sites',
-          color: 'cyan',
-          matchMode: 'contains',
-        },
-      ],
-  });
-}
-
-/**
- * Download the starter config as a file the user can edit and sync.
- */
-export function downloadStarterConfig(): void {
-  downloadJson(createStarterConfig());
 }
 
 export type DuplicateTabMode = 'allow' | 'prevent-all' | 'prevent-specific';
