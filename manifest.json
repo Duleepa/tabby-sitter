@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "minimum_chrome_version": "123",
-  "name": "Tabby Sitter - Automated Tab Manager ",
+  "name": "Tabby Sitter - Auto Tab Groups & Tab Manager",
   "version": "1.0.0",
-  "description": "Automatically groups, manages, and organizes tabs based on simple and complex rules.",
+  "description": "Auto-group tabs with your own URL rules, plus a side panel tab manager: duplicates, saved groups, idle unload. No account needed.",
   "permissions": [
     "tabs",
     "tabGroups",

@@ -6,33 +6,35 @@
 
 ## Overview
 
-**Tabby Sitter** watches your browser tabs and automatically moves them into organized Chrome tab groups based on URL patterns you define. No more manually dragging tabs around — just set your rules once and let Tabby Sitter herd your tabs into place.
+**Tabby Sitter** watches your browser tabs and automatically moves them into organized Chrome tab groups based on URL patterns you define. Set your rules once and let Tabby Sitter herd your tabs into place. It lives in Chrome's side panel, which also gives you a full tab manager: a live tab tree, saved groups, duplicate handling and side-by-side tabs.
 
 ## Features
 
-![Screenshot](./promotion/screenshot-1.png)
-![Screenshot](./promotion/screenshot-2.png)
+### Rules and grouping
 
-- **Rule-based auto-grouping**: Define URL patterns (e.g. `github.com`, `stackoverflow.com`) and assign them to named tab groups. Multiple patterns per rule supported.
-- **Match modes**: Choose between `contains` (substring match against the full URL) or `regex` (case-insensitive regular expression).
-- **Automatic group creation**: If a group doesn't exist yet, Tabby Sitter creates it on the fly.
-- **Auto-ungrouping**: Tabs that no longer match any rule are automatically removed from auto-managed groups.
-- **Organize All Tabs**: One-click button to re-organize all open tabs in the current window against your rules.
-- **Color coding**: Choose from 9 group colors to visually distinguish your workflows.
-- **Persistent rules**: Your grouping rules are saved in Chrome storage and survive browser restarts.
-- **Sync file**: Link a JSON file in a folder you already sync (Dropbox, iCloud, Syncthing, Obsidian vault) to keep rules, settings and saved groups in step across computers. No server, no account. Manual export/import and a starter config are also included.
-- **Side panel tab manager**: A live tab tree with search, multi-select, drag & drop in/out of groups, a right-click menu (move to group, new group, pin, unload, close), inline group rename and color, and an all-windows view. Open it from the toolbar icon or `Ctrl/Cmd+Shift+Y`.
-- **Respects manual moves**: Tabs you drag in or out of groups (in the panel or the tab strip) are left alone by the rules until you choose "Let rules manage" from the tab menu. Tabs opened from a grouped tab stay in that group unless a rule says otherwise.
-- **Domain match mode**: Match by hostname (`github.com` also matches `gist.github.com`, never `notgithub.com`). "Always group this site here" in the tab menu creates or extends a domain rule.
-- **Smart duplicate handling**: Optionally stop the same page being open twice, across all windows. Tracking parameters (`utm_*`, `fbclid`, ...) and `#fragments` are ignored, and you can add more. A new duplicate tab is closed and switches to the existing one, with an Undo; a tab you navigate to a duplicate is never closed, only flagged ("Switch & close this" / "Keep both"). A Duplicates view lists clusters with "Keep this one" and "Close all duplicates", and the toolbar icon shows the count.
-- **Saved groups**: Save a group (or a tab selection) from the menu, optionally closing it, and restore it later in this or a new window with its title, colour and tab order. Restored tabs are never auto-closed or regrouped by rules.
-- **Auto-unload**: Optionally unload tabs idle for 15 minutes to 4 hours to free memory (never the active, audible or, by default, pinned tabs; per-domain exceptions).
+- **Rule-based auto-grouping**: Define URL patterns (e.g. `github.com`, `stackoverflow.com`) and assign them to named, coloured tab groups. Multiple patterns per rule; groups are created on the fly.
+- **Three match modes**: `contains` (substring of the full URL), `domain` (hostname: `github.com` also matches `gist.github.com`, never `notgithub.com`) and `regex` (case-insensitive regular expression).
+- **Auto-ungrouping**: Tabs that navigate away from a rule's sites leave that rule's group. Tabs opened from a grouped tab stay in its group unless a rule says otherwise (Settings > Keep tabs in their group).
+- **Respects manual moves**: Tabs you drag in or out of groups (in the panel or the tab strip) are left alone by the rules until you choose "Let rules manage" from the tab menu. "Always group this site here" creates or extends a domain rule from any tab.
+- **Organize**: The wand button (or `Ctrl/Cmd+Shift+O`) applies your rules to the window; Shift-click organizes all windows. Optionally sort unmatched tabs by domain.
+
+### Side panel tab manager
+
+- **Live tab tree**: Search, multi-select, keyboard navigation, drag & drop in and out of groups, an all-windows view, and a right-click menu (move to group, new group, pin, unload, close). Rename and recolour groups inline. Open it from the toolbar icon or `Ctrl/Cmd+Shift+Y`.
+- **Saved groups**: Save a group (or a tab selection), optionally closing it, and restore it later in this or a new window with its title, colour and tab order. Restored tabs are never auto-closed or regrouped by rules.
 - **Tidy**: Sort a group's tabs by site, unload a whole group, or merge same-named groups across windows.
-- **Side by side tabs** (Chrome 155+): hover any tab and click the split icon (or select two tabs and press `S`) to open it beside the current tab. Tabby Sitter moves, groups and pins the tab as needed so Chrome accepts the pair; pairs show as one joined row, stay together when dragged or sorted, and are left alone by rules and duplicate auto-close.
-- **Light and dark themes**: follows your system or can be forced in Settings > Appearance; built on design tokens so new themes are a small CSS override.
-- **Minimal permissions**: `tabs`, `tabGroups`, `storage`, `sidePanel`, `alarms`. No host access, no content scripts.
-- **Organize**: Applies rules to the panel's window; Shift-click organizes all windows.
-- **Rules and Settings** live in the same panel.
+- **Side by side tabs** (Chrome 155+): Hover a tab and click the split icon (or select two tabs and press `S`) to open it beside the current tab. Tabby Sitter moves, groups and pins the tab as needed so Chrome accepts the pair; pairs show as one joined row, stay together when dragged or sorted, and are left alone by rules and duplicate auto-close. On older Chrome, Settings explains why it is unavailable.
+
+### Housekeeping
+
+- **Smart duplicate handling**: Optionally stop the same page being open twice, across all windows (or only for chosen domains). Tracking parameters (`utm_*`, `fbclid`, ...) and `#fragments` are ignored, and you can add more. A new duplicate tab is closed and switches to the existing one, with an Undo; a tab you navigate to a duplicate is never closed, only flagged ("Switch & close this" / "Keep both"). A Duplicates view lists clusters with "Keep this one" and "Close all duplicates", and the toolbar icon can show the count.
+- **Auto-unload**: Optionally unload tabs idle for 15 minutes to 4 hours to free memory (never the active or audible tab, pinned tabs only if you allow it, and per-domain exceptions).
+
+### Settings, sync and privacy
+
+- **Sync file**: Link a JSON file in a folder you already sync (Dropbox, iCloud, Syncthing, Obsidian vault) to keep rules, settings and saved groups in step across computers. No server, no account. Manual export/import and a starter config are also included.
+- **Light and dark themes**: Follows your system or can be forced in Settings > Appearance.
+- **Minimal permissions**: `tabs`, `tabGroups`, `storage`, `sidePanel`, `alarms`. No host access, no content scripts, nothing sent anywhere.
 
 ## Installation (Developer Mode)
 
@@ -56,16 +58,18 @@
 
 ## Usage
 
-1. Click the **Tabby Sitter** icon in your Chrome toolbar.
-2. **Add a rule** (Add tab):
-   - **Patterns**: Enter one or more URL patterns, separated by commas, newlines, or semicolons (e.g. `github.com, gitlab.com`).
-   - **Match Mode**: Choose `contains` (default) for substring matching or `regex` for regular expressions.
-   - **Group Name**: Give your group a name (e.g. `Dev`, `Docs`).
-   - **Color**: Pick a color for the group.
-   - **Description** (optional): Add a note for yourself.
+1. Click the **Tabby Sitter** icon in your Chrome toolbar (or press `Ctrl/Cmd+Shift+Y`) to open the side panel.
+2. Go to the **Rules** tab and click **+ Add rule**:
+   - **Patterns**: One or more patterns, separated by commas, newlines, or semicolons (e.g. `github.com, gitlab.com`).
+   - **Match Mode**: `Contains` (default), `Domain` or `Regex`.
+   - **Group Name**: e.g. `Dev`, `Docs`.
+   - **Color**: Pick a colour for the group.
+   - **Description** (optional): A note for yourself.
 3. Click **Add Rule**.
-4. Open a tab matching that pattern — it will automatically snap into the configured group.
-5. **Organize All Tabs**: Click the header button to re-sort all open tabs in the current window at once.
+4. Open a tab matching that pattern and it snaps into the configured group.
+5. To apply your rules to tabs that are already open, click the **Organize** (wand) button in the panel header or press `Ctrl/Cmd+Shift+O`.
+
+The **Tabs** tab is your tab manager, **Saved** holds saved groups, and **Settings** has duplicate handling, auto-unload, sync, appearance and the rest.
 
 ## Example Rules
 
@@ -73,8 +77,8 @@
 |----------|-----------|-------|------|-------------|
 | `github.com, stackoverflow.com` | Dev | Blue | contains | Coding sites |
 | `docs\.google\.com` | Work | Green | regex | Google Docs (regex) |
-| `youtube.com` | Media | Red | contains | Videos |
-| `x.com, twitter.com, instagram.com` | Social | Cyan | contains | Social media |
+| `youtube.com` | Media | Red | domain | Videos (incl. `m.youtube.com`) |
+| `x.com, twitter.com, instagram.com` | Social | Cyan | domain | Social media (`contains` would also catch `netflix.com`) |
 
 ## Config File Sync
 
