@@ -74,20 +74,22 @@ Light and dark themes. Open the panel with the toolbar icon or Ctrl/Cmd+Shift+Y.
 
 ## Screenshots (1280x800 or 640x400; up to 5)
 
-The old screenshots have been removed. Capture new ones from v1.0.0, in this order, since the first one does most of the selling:
+Captured from v1.0.0 (1280x800, 24-bit PNG, no alpha), in upload order, since the first one does most of the selling:
 
-1. **Tab tree with rule-made groups**: the side panel next to a coloured tab strip. Caption: "Your tabs, grouped automatically by your rules"
-2. **Rules tab** with a few rules in different match modes. Caption: "Group by domain, URL text or regex"
-3. **Duplicates view** or the duplicate notice with Undo. Caption: "No more duplicate tabs"
-4. **Saved tab** with a couple of saved groups. Caption: "Save groups and bring them back later"
-5. **Settings > Sync file** (or dark theme). Caption: "Sync with your own file. No account."
+1. `screenshot-1-tabs.png` (light): tab tree with rule-made groups next to a coloured tab strip. Caption: "Your tabs, grouped automatically by your rules"
+2. `screenshot-2-rules.png` (light): Rules tab with domain, contains and regex rules. Caption: "Group by domain, URL text or regex"
+3. `screenshot-3-duplicates.png` (light): duplicate notice and Duplicates chip. Caption: "No more duplicate tabs"
+4. `screenshot-4-saved.png` (dark): Saved tab with a restored group. Caption: "Save groups and bring them back later"
+5. `screenshot-5-sync.png` (dark): Settings > Sync file, linked. Caption: "Sync with your own file. No account."
 
-Use clean demo tabs only, with no personal data in titles or URLs, and show both light and dark across the set.
+To retake them, use a fresh Chrome profile with no sign-in, load `dist/` unpacked, import `demo-config.json` (demo rules, saved groups, light theme), open only public pages, size the window to 1280x800 and capture just that window (`screencapture -o -l <window id>`). Flatten the result onto an opaque background: the store rejects PNGs with alpha.
 
 ## Promotional images
 
-- Small promo tile (440x280): `tabbysitter-logo.png` is already the correct size.
-- Marquee (1400x560): `marquee-tile.png`.
+Both are 24-bit PNG with no alpha, as the store requires.
+
+- Small promo tile (440x280): `tabbysitter-logo.png`.
+- Marquee (1400x560): `marquee-tile.png`, rendered from `marquee-tile.html` (open it in Chrome at 1400x560; it reuses `screenshot-1-tabs.png` and the extension icon). `marquee-tile.svg` is the older design.
 
 ## How this is positioned against competitors
 

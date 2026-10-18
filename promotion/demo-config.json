@@ -1,0 +1,40 @@
+{
+  "tabbySitter": {
+    "version": "0.3.0",
+    "rules": [
+      { "id": "demo-dev", "groupName": "Dev", "color": "blue", "matchMode": "domain",
+        "patterns": ["github.com", "stackoverflow.com", "developer.mozilla.org"], "description": "Code and docs" },
+      { "id": "demo-research", "groupName": "Research", "color": "green", "matchMode": "domain",
+        "patterns": ["wikipedia.org", "arxiv.org"] },
+      { "id": "demo-media", "groupName": "Media", "color": "red", "matchMode": "domain",
+        "patterns": ["youtube.com", "vimeo.com"] },
+      { "id": "demo-docs", "groupName": "Docs", "color": "purple", "matchMode": "contains",
+        "patterns": ["/docs/", "readthedocs.io"] },
+      { "id": "demo-recipes", "groupName": "Recipes", "color": "orange", "matchMode": "regex",
+        "patterns": ["(recipe|cooking)"] }
+    ],
+    "settings": {
+      "theme": "light",
+      "duplicateTabMode": "prevent-all",
+      "duplicateTabConfirm": true,
+      "duplicateBadge": true,
+      "keepOpenedTabsInGroup": true,
+      "autoDiscardMinutes": 60
+    },
+    "savedGroups": [
+      { "id": "demo-saved-trip", "title": "Trip to Lisbon", "color": "cyan", "createdAt": 1760000000000, "updatedAt": 1760000000000,
+        "tabs": [
+          { "url": "https://en.wikipedia.org/wiki/Lisbon", "title": "Lisbon - Wikipedia" },
+          { "url": "https://en.wikipedia.org/wiki/Bel%C3%A9m_Tower", "title": "Belém Tower - Wikipedia" },
+          { "url": "https://en.wikipedia.org/wiki/Sintra", "title": "Sintra - Wikipedia" }
+        ] },
+      { "id": "demo-saved-learn", "title": "Learn Rust", "color": "yellow", "createdAt": 1760000000000, "updatedAt": 1760000000000,
+        "tabs": [
+          { "url": "https://doc.rust-lang.org/book/", "title": "The Rust Programming Language" },
+          { "url": "https://doc.rust-lang.org/rust-by-example/", "title": "Rust By Example" },
+          { "url": "https://github.com/rust-lang/rustlings", "title": "rust-lang/rustlings: Small exercises to get you used to reading and writing Rust code!" },
+          { "url": "https://www.youtube.com/@RustVideos", "title": "Rust - YouTube" }
+        ] }
+    ]
+  }
+}
