@@ -86,8 +86,10 @@ To retake them, use a fresh Chrome profile with no sign-in, load `dist/` unpacke
 
 ## Promotional images
 
-- Small promo tile (440x280): `tabbysitter-logo.png` is already the correct size.
-- Marquee (1400x560): `marquee-tile.png`.
+Both are 24-bit PNG with no alpha, as the store requires.
+
+- Small promo tile (440x280): `tabbysitter-logo.png`.
+- Marquee (1400x560): `marquee-tile.png`, rendered from `marquee-tile.html` (open it in Chrome at 1400x560; it reuses `screenshot-1-tabs.png` and the extension icon). `marquee-tile.svg` is the older design.
 
 ## How this is positioned against competitors
 
